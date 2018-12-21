@@ -24,7 +24,7 @@ xy = [xy1(:),xy2(:)];
 [poslayer_t,poslayer_tp1,Fxt, Fyt, Fzt, Fxtp1, Fytp1, Fztp1,XYZ_tori,XYZ_tp1ori,outliers] = deal([]);
 for id_ix = find(ix)
     %%
-    if isempty(regpts{id_ix}.X)
+    if isempty(regpts{id_ix}.X) | size(regpts{id_ix}.X,1)<250
         continue
     end
     %%

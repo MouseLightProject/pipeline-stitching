@@ -1,3 +1,99 @@
+tottile = size(curvemodel{1},3);
+rt1= zeros(tottile,3);
+rt2= zeros(tottile,3);
+siz1 = zeros(tottile,1);
+siz2 = zeros(tottile,1);
+for ii=1:tottile,rt1(ii,:)=curvemodel{1}(1,:,ii);siz1(ii)=size(paireddescriptor{1}{ii}.onx.X,1);end
+for ii=1:tottile,rt2(ii,:)=curvemodel{1}(2,:,ii);siz2(ii)=size(paireddescriptor{1}{ii}.ony.X,1);end
+%%
+% close all
+rt = rt2;
+siz = siz2;
+interior = util.interior_tiles(scopeloc,3);
+
+% generate weighted histogram
+xx = rt(:,3);
+siz_uni = (siz>-1) .* (xx>0 & siz>0) .* (interior>0);
+% replicate each entry siz many times
+C = cell(1,tottile);
+for ii=1:tottile
+    C{ii} = repmat(xx(ii),siz_uni(ii),1);
+end
+C = cat(1,C{:});
+
+figure, 
+hist(C,100)
+title('interior')
+%%
+set1 = abs(rt(:,3)-863)>3 & rt(:,1)>1;
+set2 = abs(rt(:,3)-863)<3 & rt(:,1)>1;
+rt(set1,:)
+rt(set2,:)
+
+
+%% %%%%%%%%%%%%%%%%%
+
+
+% read tiles
+iadj = 2; % 1 for x, 2 for y
+idxcent = neigs(ineig,1);
+idxadj = neigs(ineig,iadj+1);
+
+
+[Ic,filec] = util.getTilefromId(scopeloc,idxcent);
+[It, filet] = util.getTilefromId(scopeloc,idxadj);
+Ic_m = rot90(max(Ic,[],3),2);
+It_m = rot90(max(It,[],3),2);
+dims = size(Ic);dims=dims([2 1 3]);
+%%
+idxcent = neigs(ineig,1);
+descent = descriptors{idxcent};
+descent = double(descent(:,1:3));
+descent = util.correctTiles(descent,dims); % flip dimensions
+
+descadj = descriptors{idxadj};
+descadj = double(descadj(:,1:3)); % descadj has x-y-z-w1-w2 format
+descadj = util.correctTiles(descadj,dims); % flip dimensions
+
+stgshift = 1000*(scopeloc.loc(idxadj,:)-scopeloc.loc(idxcent,:));
+pixshift = round(stgshift.*(dims-1)./(imsize_um));
+descadj = descadj + ones(size(descadj,1),1)*pixshift; % shift with initial guess based on stage coordinate
+
+%%
+figure(43), cla
+RA = imref2d(size(Ic_m),[1 dims(1)],[1 dims(2)]);
+RB = imref2d(size(It_m),[1 dims(1)]+pixshift(1),[1 dims(2)]);
+imshowpair(imadjust(Ic_m),RA,imadjust(It_m),RB,'falsecolor','Scaling','joint','ColorChannels','green-magenta')
+hold on
+myplot3(descent-1,{'bo','MarkerSize',6,'LineWidth',1})
+myplot3(descadj-1,{'ro','MarkerSize',6,'LineWidth',1})
+
+%%
+figure(32)
+showMatchedFeatures(Ic_m,It_m,X_(:,1:2),Y_(:,1:2))
+
+%%
+figure(13), clf, cla
+imshow(Ic_m,[11 15]*1e3,'XData',[1 dims(1)],'YData',[1 dims(2)])
+hold on
+imshow(It_m,[11 15]*1e3,'XData',[1 dims(1)]+pixshift(1),'YData',[1 dims(2)])
+xlim([1 dims(1)+pixshift(1)])
+alpha(.5)
+% 
+% 
+% hold on, myplot3(descent,'o')
+
+
+% nbound = [0 0];
+% nbound(1) = max(pixshift(iadj),min(descadj(:,iadj)));
+% nbound(2) = min(dims(iadj),max(descent(:,iadj)))+0;
+% X = descent(descent(:,iadj)>nbound(1)&descent(:,iadj)<nbound(2),:);
+% Y = descadj(descadj(:,iadj)>nbound(1)&descadj(:,iadj)<nbound(2),:);
+
+%%
+
+
+
 load(fullfile(matfolder,'scopeparams_pertile_singletile'),'paireddescriptor', ...
     'scopeparams', 'R', 'curvemodel','scopeparams_', 'paireddescriptor_', ...
     'curvemodel_','params')
@@ -60,16 +156,16 @@ Ycent_fc = Ycent_fc-1;
 % Acent_ = sdisp'/[Ycent_fc-Xcent_fc]';
 % res=Acent_*(Ycent_fc - Xcent_fc)'-(scopeloc.loc(icent,:)-scopeloc.loc(ineig,:))'*1000;
 % (abs(res(2,:)))>.35 % 1 pix
-% 
+%
 % figure
 % myplot3(Xcent,'b.')
 % %%
 % glSFC_ = sdisp/DallFC
 % res = [glSFC_*(Dall)-sdisp]/1e3;
 % res = sqrt(sum(res.^2,1));
-% 
+%
 % glSFC_2 = sdisp(:,res<.5)/DallFC(:,res<.5)
-% 
+%
 % max(sqrt(sum(res.^2,1)))
 
 %
@@ -214,7 +310,7 @@ plot(X_(:,1),dispvec(:,2),'.')
 axis tight
 
 %%
-figure(1), 
+figure(1),
 cla
 imshow(ImC,[11 15]*1e3)
 hold on
@@ -224,13 +320,13 @@ myplot3(paireddescriptor{ineig}.onx.X,'o')
 
 
 %%
-figure(2), 
+figure(2),
 imshow(ImN,[11 15]*1e3)
 hold on
 myplot3(paireddescriptor{ineig}.ony.Y,'o')
 
 %%
-figure(2), 
+figure(2),
 imshow(ImXp1,[])
 hold on
 myplot3(Y_,'o')
@@ -239,7 +335,7 @@ myplot3(Y_,'o')
 old=[-376.7212665974943206, -1.4150539397464144, 44.3289718325040667, 0.0, 71108753.59580696,
     2.3374766378038374, -297.0775556009028833, -13.8336760551395486, 0.0, 14667134.00371697,
     0.2542090768871866, 0.7845732492211573, 888.2112152288162861, 0.0, 35412268.12609629,
-    0.0, 0.0, 0.0, 1.0, 0.0, 
+    0.0, 0.0, 0.0, 1.0, 0.0,
     -0.0, 0.0, 0.0, 0.0, 1.0]
 new=[-376.2621493364757725, -1.4195567316836457, 44.7492455332472261, 0.0, 71108071.94444494,
     2.2485697966564264, -296.7169950905342830, -14.2602659659113709, 0.0, 14667817.50149242,
@@ -260,10 +356,10 @@ end
 %%
 err3=[]
 for ix = 218:220
-for iy = 33:35
-    er1=scopeloc.loc(find(scopeloc.gridix(:,1)==ix&scopeloc.gridix(:,2)==iy&scopeloc.gridix(:,3)==781),:)
-    err3(end+1,:) = er1(1,:);
-end
+    for iy = 33:35
+        er1=scopeloc.loc(find(scopeloc.gridix(:,1)==ix&scopeloc.gridix(:,2)==iy&scopeloc.gridix(:,3)==781),:)
+        err3(end+1,:) = er1(1,:);
+    end
 end
 diff(err3)
 %%

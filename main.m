@@ -1,4 +1,4 @@
-function [outputArgs] = main(brain,inputfolder,pipelineoutputfolder)
+function [outputArgs] = main(inputfolder,pipelineoutputfolder,experimentfolder)
 %STICHING pipeline. Reads scope generated json file and returns a yml
 %configuration file that goes into renderer. Requires calling cluster jobs
 %to create subresults, i.e. descriptors. These functions can also run in
@@ -16,26 +16,33 @@ function [outputArgs] = main(brain,inputfolder,pipelineoutputfolder)
 %
 % See also: List related files here
 
-% $Author: base $	$Date: 2016/09/21 11:52:40 $	$Revision: 0.1 $
+% NOTES:
+% directionMap = containers.Map({'-X','-Y','X','Y','-Z','Z'},[ 2, 3, 4, 5, 6, 7]);
+% directions = 'Z';
+
+% $Author: base $	$Date: 2016/09/21 11:52:40 $
 % Copyright: HHMI 2016
+
 %% MAKE SURE PATHS etc are correct
-% inputfolder = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling',brain);
 runfull = false;
 if nargin==1
-    brain = '2018-08-01';
+    %brain = '2018-08-01';
+    brain = inputfolder;
     inputfolder = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/%s',brain);
-    pipelineoutputfolder = sprintf('/nrs/mouselight/pipeline_output/%s',brain)
+    pipelineoutputfolder = sprintf('/nrs/mouselight/pipeline_output/%s',brain);
+    arch = lower(computer('arch'));
+    if arch(1:2) == 'pc'
+        error('windows machine, set the input using input arguments')
+    else
+        experimentfolder = sprintf('/nrs/mouselight/cluster/classifierOutputs/%s-%s',brain,getenv('USER'));
+    end
+    
 elseif nargin<1
     error('At least pass brain id')
 end
 
-%%
-directionMap = containers.Map({'-X','-Y','X','Y','-Z','Z'},[ 2, 3, 4, 5, 6, 7]);
-directions = 'Z';
-
 addpath(genpath('./common'))
 addpath(genpath('./functions'))
-tag='';
 % classifierinput = inputfolder;
 % raw input to descriptor generotion
 
@@ -47,8 +54,6 @@ if piperun
         descoutput ='/nrs/mouselight/cluster/classifierOutputs/2017-09-25/classifier_output'
         matchoutput = descoutput;
     elseif brain=='2018-08-15'
-%         classifieroutput = fullfile(pipelineoutputfolder,'stage_2_classifier_output')
-%         descinput = classifieroutput;
         descoutput = fullfile(pipelineoutputfolder,'stage_2_descriptor_output')
         matchinput = descoutput;
         matchoutput = fullfile(pipelineoutputfolder,'stage_3_point_match_output')
@@ -61,13 +66,16 @@ if piperun
     end
 end
 
-experimentfolder = sprintf('/nrs/mouselight/cluster/classifierOutputs/%s',brain);
-matfolder = fullfile(experimentfolder,'matfiles/');
-mkdir(matfolder)
-unix(sprintf('umask g+rxw %s',matfolder));
-unix(sprintf('chmod g+rxw %s',matfolder));
-scopefile = fullfile(matfolder,'scopeloc.mat');
 
+matfolder = fullfile(experimentfolder,'matfiles/');
+
+mkdir(experimentfolder)
+unix(sprintf('chmod g+rxw %s',experimentfolder));
+unix(sprintf('umask g+rxw %s',experimentfolder));
+mkdir(matfolder)
+
+
+scopefile = fullfile(matfolder,'scopeloc.mat');
 if piperun
     descriptorfolder = descoutput;
     matchfolder = matchoutput;
@@ -83,7 +91,7 @@ matchedfeatfile = fullfile(matfolder,sprintf('feats_ch%s.mat',desc_ch{:})); % ac
 
 %% 0: INTIALIZE
 % read scope files and populate stage coordinates
-if runfull
+if runfull & 0
     newdash = 1; % set this to 1 for datasets acquired after 160404
     [scopeloc] = getScopeCoordinates(inputfolder,newdash);% parse from acqusition files
     [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
@@ -95,9 +103,6 @@ end
 % rather then channel logs
 if 0
     curationH5(classifierinput,classifieroutput)
-end
-
-if 0
     % checkmissingProb(classifierinput,classifieroutput)
     checkmissingDesc(descinput,descoutput)
     checkmissingMatch(matchinput,matchoutput)
@@ -137,7 +142,7 @@ end
 % iii) creates a 3D affine model by jointly solving a linear system of
 % equations
 
-if runfull | 1
+if runfull
     
     %%
     load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
@@ -145,39 +150,30 @@ if runfull | 1
     scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));
     % params.sample = brain;
     params.scopeacqparams = scopeacqparams;
+    params.imsize_um = [scopeacqparams.x_size_um scopeacqparams.y_size_um scopeacqparams.z_size_um];
+    params.overlap_um = [scopeacqparams.x_overlap_um scopeacqparams.y_overlap_um scopeacqparams.z_overlap_um];
+    params.imagesize = [1024 1536 251];
+
     params.viz = 0;
     params.debug = 0;
     params.Ndivs = 4;
     params.Nlayer = 4;
     params.htop = 5;
     params.expensionratio = 1;
-    params.imagesize = [1024 1536 251];
-    params.imsize_um = [scopeacqparams.x_size_um scopeacqparams.y_size_um scopeacqparams.z_size_um];
-    params.overlap_um = [scopeacqparams.x_overlap_um scopeacqparams.y_overlap_um scopeacqparams.z_overlap_um];
     params.order = 1;
     params.applyFC = 1;
     params.beadparams = [];%PLACEHOLDER FOR BEADS, very unlikely to have it...
     params.singleTile = 1;
 
-    if 1
-        if 0
-            [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
-                tileProcessor_debug(scopeloc,descriptorfolder,desc_ch,params);
-        else
-            [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
-                tileProcessor(scopeloc,descriptorfolder,desc_ch,params);
-            save(descriptorfile,'descriptors','-v7.3')
-            save(fullfile(matfolder,'scopeparams_pertile'),'paireddescriptor', ...
-                'scopeparams', 'curvemodel','params','-v7.3')
-        end
+    if 0
+        [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
+            tileProcessor_debug(scopeloc,descriptorfolder,desc_ch,params);
     else
-        descriptors = getDescriptorsPerFolder(descriptorfolder,scopeloc,desc_ch);
-        [paireddescriptor, scopeparams, R, curvemodel,scopeparams_, paireddescriptor_,curvemodel_] = ...
-            estimateFCpertile(descriptors,neighbors,scopeloc,params); %#ok<ASGLU>
+        [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
+            tileProcessor(scopeloc,descriptorfolder,desc_ch,params);
         save(descriptorfile,'descriptors','-v7.3')
-        save(fullfile(matfolder,'scopeparams_pertile_singletile'),'paireddescriptor', ...
-            'scopeparams', 'R', 'curvemodel','scopeparams_', 'paireddescriptor_', ...
-            'curvemodel_','params')
+        save(fullfile(matfolder,'scopeparams_pertile'),'paireddescriptor', ...
+            'scopeparams', 'curvemodel','params','-v7.3')
     end
 end
 
@@ -187,15 +183,16 @@ if runfull
     load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
     load(fullfile(matfolder,'scopeparams_pertile'),'scopeparams')
     load(fullfile(matfolder,'regpts'),'regpts')
+    mkdir('./videos')
     videofile = sprintf('./videos/%s-1stiter-ch1-%s',brain,date)
-    % descriptorMatchQuality(regpts,scopeparams,scopeloc,videofile)
+    descriptorMatchQuality(regpts,scopeparams{end},scopeloc,videofile)
     %     createThumb(regpts,scopeparams,scopeloc,videofile)
-    descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,videofile)
+    % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,videofile)
 %     descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,videofile)
 end
 
 %%
-if 1
+if runfull
     load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
     load(fullfile(matfolder,'regpts'),'regpts')
     load(fullfile(matfolder,'scopeparams_pertile'),'paireddescriptor', ...
@@ -207,13 +204,13 @@ if 1
         save(fullfile(matfolder,'vecfield3D'),'vecfield3D','params')
     end
 end
-%
+%%
 % 4
-load(scopefile,'scopeloc','neighbors','imsize_um','experimentfolder','inputfolder')
+load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
 load(fullfile(matfolder,'vecfield3D'),'vecfield3D','params')
-%
 vecfield = vecfield3D;
 
+%%
 % checkthese = [1 4 5 7]; % 0 - right - bottom - below
 % [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
 params.big = 1;
@@ -223,14 +220,14 @@ params.root = vecfield.root;
 
 if sub
     targetidx = getTargetIDx(scopeloc,neighbors);
+    copytiles2target('./test_copt',scopeloc,targetidx(1))
     params.outfile = fullfile(experimentfolder,sprintf('%s_sub.control.yml',date));
 else
     targetidx = 1:size(scopeloc.gridix,1);
     params.outfile = fullfile(experimentfolder,sprintf('%s.control.yml',date));
 end
-
-writeYML(params, targetidx(:)', vecfield)
-unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache.yml')))
+writeYML(params, targetidx(:)', vecfield);
+unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache.yml')));
 %
 if ~sub
     params.big=0

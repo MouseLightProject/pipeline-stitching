@@ -136,7 +136,7 @@ if 1
     if nargin<6 | isempty(theselayers)
         theselayers=latticeZRange(1:end-1)';
     end
-    stopindex = 149;
+    stopindex = 18799;
     nooptim = NaN(1,numTiles);
     for t = theselayers
         %%
@@ -173,7 +173,7 @@ if 1
                 h = scopeparams(1).imsize_um(2)*ones(sum(ix),1)*1e3;
                 for ii=1:sum(ix)
                     rectangle('Position', [x(ii)-w(ii) y(ii)-h(ii) w(ii) h(ii)],'EdgeColor','r')
-                    text(x(ii)-w(ii)/2,y(ii)-h(ii)/2,2,num2str(ii),...
+                    text(x(ii)-w(ii)/2,y(ii)-h(ii)/2,2,sprintf('%d: %d',ii,idxinlayer(ii)),...
                         'Color','m','HorizontalAlignment','center','FontSize',8)
                 end
                 

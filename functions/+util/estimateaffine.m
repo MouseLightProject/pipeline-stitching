@@ -45,14 +45,15 @@ xlocs = 1:dims(1);
 ylocs = 1:dims(2);
 [xy2,xy1] = ndgrid(ylocs(:),xlocs(:));
 xy = [xy1(:),xy2(:)];
+
 %%
 scopeparams = [];
 Ntiles = size(neigs,1);
 edges = cell(1,Ntiles);
-for ineig = 1:Ntiles
-    edge = paireddescriptor{ineig}.neigs(2:3);
-    counts = paireddescriptor{ineig}.count;
-    edges{ineig} = [[ineig;ineig],[edge(:)],counts(:)];
+for itile = 1:Ntiles
+    edge = paireddescriptor{itile}.neigs(2:3);
+    counts = paireddescriptor{itile}.count;
+    edges{itile} = [[itile;itile],[edge(:)],counts(:)];
 end
 edges = cat(1,edges{:});
 edges(any(isnan(edges),2),:)=[];
@@ -64,63 +65,68 @@ parfor_progress(Ntiles)
 if old
     skipinds = any(isnan(neigs4(:,[4 5])),2);
 else
-    skipinds = any(isnan(neigs4(:,2:3)),2)&any(isnan(neigs4(:,4:5)),2);
+    % keeps tile if [(-x|+x) & (-y|+y)]: if there exists pairs on x&y
+    skipinds = ~[any(isfinite(neigs4(:,[2 4])),2)&any(isfinite(neigs4(:,[3 5])),2)]; % 
+    % keeps tile only if there exists a consecutice pairs on x&y
+    % skipinds = any(isnan(neigs4(:,2:3)),2)&any(isnan(neigs4(:,4:5)),2);
 end
 validthis = zeros(1,Ntiles);
 %%
 try; parfor_progress(0);catch;end
 parfor_progress(Ntiles)
-parfor ineig = 1:Ntiles
+parfor itile = 1:Ntiles
     %%
-    scopeparams(ineig).imsize_um = imsize_um;
-    scopeparams(ineig).dims = dims;
-    neiginds = find(G(ineig,:));
-    theseinds = setdiff(neiginds,paireddescriptor{ineig}.neigs(2:3));
+    scopeparams(itile).imsize_um = imsize_um;
+    scopeparams(itile).dims = dims;
+    neiginds = find(G(itile,:));
+    theseinds = setdiff(neiginds,paireddescriptor{itile}.neigs(2:3));
     
-    if skipinds(ineig)
+    if skipinds(itile)
         
     else
         [allX,allY,allXFC,allYFC,sdisp] = deal([]);
         siz = zeros(1); % right/below + left/above
         stgdisp = zeros(3,1); % right/below + left/above
         % right adjacency
-        if ~isnan(neigs(ineig,2))
-            siz(1) = size(paireddescriptor{ineig}.onx.X,1);
-            allX = [allX;paireddescriptor{ineig}.onx.X];
-            allY = [allY;paireddescriptor{ineig}.onx.Y];
-            stgdisp(:,1) = 1000*(scopeloc.loc(neigs(ineig,2),:)-scopeloc.loc(neigs(ineig,1),:));
+        if ~isnan(neigs(itile,2))
+            siz(1) = size(paireddescriptor{itile}.onx.X,1);
+            allX = [allX;paireddescriptor{itile}.onx.X];
+            allY = [allY;paireddescriptor{itile}.onx.Y];
+            stgdisp(:,1) = 1000*(scopeloc.loc(neigs(itile,2),:)-scopeloc.loc(neigs(itile,1),:));
             sdisp = [sdisp,1000*stgdisp(:,1)*ones(1,siz(1))];
-            validthis(ineig) = 1;
+            validthis(itile) = 1;
         end
-        if ~isnan(neigs(ineig,3))
-            siz(end+1) = size(paireddescriptor{ineig}.ony.X,1);
-            allX = [allX;paireddescriptor{ineig}.ony.X];
-            allY = [allY;paireddescriptor{ineig}.ony.Y];
-            stgdisp(:,end+1) = 1000*(scopeloc.loc(neigs(ineig,3),:)-scopeloc.loc(neigs(ineig,1),:));
+        if ~isnan(neigs(itile,3))
+            siz(end+1) = size(paireddescriptor{itile}.ony.X,1);
+            allX = [allX;paireddescriptor{itile}.ony.X];
+            allY = [allY;paireddescriptor{itile}.ony.Y];
+            stgdisp(:,end+1) = 1000*(scopeloc.loc(neigs(itile,3),:)-scopeloc.loc(neigs(itile,1),:));
             sdisp = [sdisp,1000*stgdisp(:,end)*ones(1,siz(end))];
-            validthis(ineig) = 1;
+            validthis(itile) = 1;
         end
         
         if ~isempty(theseinds) & ~old
             % check left/above
             for ii=1:length(theseinds)
-                if find(paireddescriptor{theseinds(ii)}.neigs==ineig)==2 % left
+                if find(paireddescriptor{theseinds(ii)}.neigs==itile)==2 % left
                     % left adjacency
-                    ileft = neigs4(ineig,2);
+                    ileft = neigs4(itile,2);
                     if ~isnan(ileft)
                         siz(end+1) = size(paireddescriptor{ileft}.onx.X,1);
                         allX = [allX;paireddescriptor{ileft}.onx.Y]; % flip X<->Y
                         allY = [allY;paireddescriptor{ileft}.onx.X];
-                        stgdisp(:,end+1) = 1000*(scopeloc.loc(ileft,:)-scopeloc.loc(neigs(ineig,1),:));
+                        stgdisp(:,end+1) = 1000*(scopeloc.loc(ileft,:)-scopeloc.loc(neigs(itile,1),:));
                         sdisp = [sdisp,1000*stgdisp(:,end)*ones(1,siz(end))];
+                        validthis(itile) = 1;
                     end
-                elseif find(paireddescriptor{theseinds(ii)}.neigs==ineig)==3 % above
-                    iabove = neigs4(ineig,3);
+                elseif find(paireddescriptor{theseinds(ii)}.neigs==itile)==3 % above
+                    iabove = neigs4(itile,3);
                     siz(end+1) = size(paireddescriptor{iabove}.ony.X,1);
                     allX = [allX;paireddescriptor{iabove}.ony.Y]; % flip X<->Y
                     allY = [allY;paireddescriptor{iabove}.ony.X];
-                    stgdisp(:,end+1) = 1000*(scopeloc.loc(iabove,:)-scopeloc.loc(neigs(ineig,1),:));
+                    stgdisp(:,end+1) = 1000*(scopeloc.loc(iabove,:)-scopeloc.loc(neigs(itile,1),:));
                     sdisp = [sdisp,1000*stgdisp(:,end)*ones(1,siz(end))];
+                    validthis(itile) = 1;
                 else
                 end
             end
@@ -146,31 +152,10 @@ parfor ineig = 1:Ntiles
         suballX = allX+1;
         suballY = allY+1;
         
-        if 1
-            [locs,xshift2D,yshift2D] = util.fcshift(curvemodel(:,:,ineig),order,xy,dims,suballX);
-            allXFC = locs-1;
-            [locs,xshift2D,yshift2D] = util.fcshift(curvemodel(:,:,ineig),order,xy,dims,suballY);
-            allYFC = locs-1;
-        else
-            cent = squeeze(mean(curvemodel(1:2,1,ineig),3));
-            scale = (squeeze(mean(curvemodel(1:2,2,ineig),3)));
-            shift = squeeze(mean(curvemodel(1:2,3,ineig),3));
-            beta = scale./shift.^order;
-            [xshift2D,yshift2D] = shiftxy(xy,cent,beta,order,dims);
-            % descriptors are 0 index based
-            idxx = sub2ind(dims([2 1]),allX(:,2),allX(:,1));
-            xshift = xshift2D(idxx);
-            idxy = sub2ind(dims([2 1]),allX(:,2),allX(:,1));
-            yshift = yshift2D(idxy);
-            allXFC(:,1) = allX(:,1) + xshift;
-            allXFC(:,2) = allX(:,2) + yshift;
-            idxx = sub2ind(dims([2 1]),allY(:,2),allY(:,1));
-            xshift = xshift2D(idxx);
-            idxy = sub2ind(dims([2 1]),allY(:,2),allY(:,1));
-            yshift = yshift2D(idxy);
-            allYFC(:,1) = allY(:,1) + xshift;
-            allYFC(:,2) = allY(:,2) + yshift;
-        end
+        [locs,xshift2D,yshift2D] = util.fcshift(curvemodel(:,:,itile),order,xy,dims,suballX);
+        allXFC = locs-1;
+        [locs,xshift2D,yshift2D] = util.fcshift(curvemodel(:,:,itile),order,xy,dims,suballY);
+        allYFC = locs-1;
         
         Dall = (allY-allX)';
         DallFC = (allYFC-allXFC)';
@@ -182,8 +167,8 @@ parfor ineig = 1:Ntiles
         end
         glS_=sdisp/Dall;
         glSFC_=sdisp/DallFC;
-        scopeparams(ineig).affinegl = glS_;
-        scopeparams(ineig).affineglFC = glSFC_;
+        scopeparams(itile).affinegl = glS_;
+        scopeparams(itile).affineglFC = glSFC_;
     end
     parfor_progress;
 end

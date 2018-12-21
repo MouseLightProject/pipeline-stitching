@@ -1,5 +1,6 @@
 function [locs,xshift2D,yshift2D] = fcshift(model,order,xy,dims,locs)
-
+% estimates 2D FC fields as a function of curvature model and distance to
+% imaging center. 
 if isempty(xy)
     xlocs = 1:dims(1);
     ylocs = 1:dims(2);

@@ -20,7 +20,8 @@ big = params.big;
 fn = params.outfile;
 del = sprintf('  ');
 % fn = [fn '.control.yml'];
-mkdir(fileparts(fn))
+
+if ~exist(fileparts(fn),'dir');mkdir(fileparts(fn));end
 fid = fopen(fn, 'w+');
 fprintf(fid, '%s\n', ['path: ' params.root]);
 % fprintf(fid, '%s\n', ['path: ' tb.root]);

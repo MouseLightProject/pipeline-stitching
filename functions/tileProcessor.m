@@ -3,24 +3,25 @@ function [descriptors,paireddescriptor,curvemodel,scopeparams] = tileProcessor(s
 checkthese = [1 4 5 7]; % 0 - right - bottom - below
 [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
 % accumulator for steps
-[paireddescriptor,R,curvemodel,scopeparams]=deal([]);
+[paireddescriptor,medianResidualperTile,curvemodel,scopeparams]=deal([]);
+model = @(p,y) p(3) - p(2).*((y-p(1)).^2); % FC model
 
 %% get tile descriptors
 descriptors = getDescriptorsPerFolder(descriptorfolder,scopeloc,desc_ch);
 sprintf('Loaded descriptors')
-%% descriptor match 3785:3789
-[paireddescriptor{end+1},R{end+1},curvemodel{end+1}] = match.xymatch(descriptors,neighbors(:,checkthese),scopeloc,params);
+%% curvature estimation using desctiptor match
+[paireddescriptor{end+1},medianResidualperTile{end+1},curvemodel{end+1}] = match.xymatch(descriptors,neighbors(:,checkthese),scopeloc,params,model);
 sprintf('X&Y descriptor match done')
 
-%%
-[paireddescriptor{end+1},curvemodel{end+1},unreliable] = match.curvatureOutlierElimination(paireddescriptor{end},curvemodel{end},scopeloc);
+%% interpolate tiles with missing parameters from adjecent tiles
+[paireddescriptor{end+1},curvemodel{end+1},unreliable,neigbors_used] = match.curvatureOutlierElimination(paireddescriptor{end},curvemodel{end},scopeloc,params,model);
 sprintf('outlier elimination done')
 
 %%
 % tile base affine
 if params.singleTile
     [scopeparams{1},scopeparams{2},paireddescriptor{end+1},curvemodel{end+1}] = homographyPerTile6Neighbor(...
-        params,neighbors,scopeloc,paireddescriptor{end},R,curvemodel{end});
+        params,neighbors,scopeloc,paireddescriptor{end},curvemodel{end},unreliable,neigbors_used);
     sprintf('per-tile affine estimation')
 else
     % joint affine estimation

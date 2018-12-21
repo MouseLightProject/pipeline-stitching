@@ -1,0 +1,15 @@
+x_mm: 73.0628
+y_mm: 18.5482
+z_mm: 29.30501
+current_lattice_position {
+  x: 225
+  y: 43
+  z: 1439
+}
+cut_count: 1439
+fov_x_size_um: 384.72339
+fov_y_size_um: 456.35
+fov_z_size_um: 250
+fov_x_overlap_um: 60
+fov_y_overlap_um: 25
+fov_z_overlap_um: 75
