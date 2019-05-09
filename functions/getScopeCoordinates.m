@@ -41,7 +41,7 @@ if newdash
     for ifile = 1:size(inputfiles,1)
         parfor_progress;
         scvals = util.scopeparser(inputfiles{ifile});
-        gridix{ifile} = [scvals.x scvals.y scvals.z scvals.cut_count];
+        gridix{ifile} = [scvals.x+1 scvals.y+1 scvals.z+1 scvals.cut_count];  % the +1's are to convert zero-based indices to one-based
         loc{ifile} = [scvals.x_mm scvals.y_mm scvals.z_mm];
     end
     parfor_progress(0);
@@ -91,7 +91,7 @@ for ii=1:length(inputfiles)
     relativepaths{ii} = fileparts(inputfiles{ii}(length(inputfolder)+1:end));
 end
 
-scope.gridix = grids;
+scope.gridix = grids ;
 scope.loc = locs;
 scope.filepath = inputfiles;
 scope.relativepaths = relativepaths;

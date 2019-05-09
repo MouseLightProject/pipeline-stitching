@@ -1,4 +1,4 @@
-function [outputArgs] = main(inputfolder,pipelineoutputfolder,experimentfolder)
+function stitch(inputfolder,pipelineoutputfolder,experimentfolder)
 %STICHING pipeline. Reads scope generated json file and returns a yml
 %configuration file that goes into renderer. Requires calling cluster jobs
 %to create subresults, i.e. descriptors. These functions can also run in
@@ -23,23 +23,24 @@ function [outputArgs] = main(inputfolder,pipelineoutputfolder,experimentfolder)
 % $Author: base $	$Date: 2016/09/21 11:52:40 $
 % Copyright: HHMI 2016
 
+% I've only ever called this like e.g. "stitch('2019-03-26')"  
+%     --ALT, 2019-05-09
+
 %% MAKE SURE PATHS etc are correct
 runfull = true;
 if nargin==1
     %brain = '2018-08-01';
-    brain = inputfolder;
-    inputfolder = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/%s',brain);
-    pipelineoutputfolder = sprintf('/nrs/mouselight/pipeline_output/%s',brain);
-    arch = lower(computer('arch'));
-    if arch(1:2) == 'pc'
+    sample_date = inputfolder;
+    inputfolder = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/%s',sample_date);
+    pipelineoutputfolder = sprintf('/nrs/mouselight/pipeline_output/%s',sample_date);
+    %arch = lower(computer('arch'));
+    if ispc() ,
         error('windows machine, set the input using input arguments')
     else
-        experimentfolder = sprintf('/nrs/mouselight/cluster/classifierOutputs/%s-%s',brain,getenv('USER'));
-    end
-    
+        experimentfolder = sprintf('/nrs/mouselight/cluster/classifierOutputs/%s-%s', sample_date, getenv('USER'));
+    end    
 elseif nargin<1
-    %error('At least pass brain id')
-    brain='2019-03-26'
+    error('At least pass brain id')
 end
 
 addpath(genpath('./common'))
@@ -47,14 +48,14 @@ addpath(genpath('./functions'))
 % classifierinput = inputfolder;
 % raw input to descriptor generotion
 
-piperun = 1;
+piperun = true ;
 
 if piperun
-    if brain=='2017-09-25'
+    if isequal(sample_date, '2017-09-25')
         classifierinput = inputfolder;
         descoutput ='/nrs/mouselight/cluster/classifierOutputs/2017-09-25/classifier_output'
         matchoutput = descoutput;
-    elseif brain=='2018-08-15'
+    elseif isequal(sample_date, '2018-08-15')
         descoutput = fullfile(pipelineoutputfolder,'stage_2_descriptor_output')
         matchinput = descoutput;
         matchoutput = fullfile(pipelineoutputfolder,'stage_3_point_match_output')
@@ -96,8 +97,7 @@ matchedfeatfile = fullfile(matfolder,sprintf('feats_ch%s.mat',desc_ch{:})); % ac
 
 %% 0: INTIALIZE
 % read scope files and populate stage coordinates
-%if runfull & 1
-if false,   % Put in by ALT after this stage had run for 2019-03-26 sample
+if runfull ,  
     newdash = 1; % set this to 1 for datasets acquired after 160404
     [scopeloc] = getScopeCoordinates(inputfolder,newdash);% parse from acqusition files
     [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
@@ -107,7 +107,7 @@ end
 %% BULLSHIT CURATION STUFF
 % obsolute after pipeline, TODO: fix missing condition for tile runs
 % rather then channel logs
-if 0
+if false ,  % this part doesn't seem to work if you give the function a single argument...
     curationH5(classifierinput,classifieroutput)
     % checkmissingProb(classifierinput,classifieroutput)
     checkmissingDesc(descinput,descoutput)
@@ -116,7 +116,7 @@ end
 
 %%
 % 1: LOAD MATCHED FEATS
-if runfull && false ,
+if runfull ,
     fprintf('Loading matched features stage...\n') ;
     load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder');
     directions = 'Z';
@@ -130,8 +130,7 @@ if runfull && false ,
     end
 end
 
-if 0 % iterate on missing tiles (ANOTHER BULLSHIT)
-    
+if false ,  % iterate on missing tiles (ANOTHER BULLSHIT)    
     addpath(genpath('/groups/mousebrainmicro/home/base/CODE/MATLAB/pipeline/zmatch_pipe'),'-end')
     %pointmatch_task(brain,runlocal)
     directions = 'Z';
@@ -149,7 +148,7 @@ end
 % iii) creates a 3D affine model by jointly solving a linear system of
 % equations
 
-if runfull  &&  0 %TF
+if runfull ,
     
     %%
     fprintf('Running tileProcessor stage...\n') ;
@@ -186,14 +185,14 @@ if runfull  &&  0 %TF
 end
 
 %%
-if runfull &&  0 %TF
+if runfull ,
     %%
     fprintf('Running descriptorMatchQuality stage...\n') ;
     load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
     load(fullfile(matfolder,'scopeparams_pertile'),'scopeparams')
     load(fullfile(matfolder,'regpts'),'regpts')
     mkdir('./videos')
-    videofile = sprintf('./videos/%s-1stiter-ch1-%s',brain,date())
+    videofile = sprintf('./videos/%s-1stiter-ch1-%s',sample_date,date())
     descriptorMatchQuality(regpts,scopeparams{end},scopeloc,videofile)
     %     createThumb(regpts,scopeparams,scopeloc,videofile)
     % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,videofile)
@@ -201,7 +200,7 @@ if runfull &&  0 %TF
 end
 
 %%
-if runfull && false  % ALT
+if runfull ,
     fprintf('Running vectorField3D stage...\n') ;
     load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
     load(fullfile(matfolder,'regpts'),'regpts')
@@ -225,7 +224,7 @@ vecfield = vecfield3D;
 % [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
 params.big = 1;
 params.ymldims = [params.imagesize 2];%[1024 1536 251 2]
-sub = 0;
+sub = false ;
 params.root = vecfield.root;
 
 if sub
@@ -246,57 +245,59 @@ if ~sub
     unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache_old.yml')))
 end
 return
-%% 0.1: FLAT RUN
-% generate yml for without any optimization
-if false
-    %%
-    load(scopefile,'scopeloc','neighbors','imsize_um','experimentfolder','inputfolder')
-    if scope==1
-        scope1_beadparams = load('./beadparams/scope1_beadparams');
-        scopeparams = scope1_beadparams.scope1_beadparams;
-    else
-        scope2_beadparams = load('./beadparams/scope2_beadparams');
-        scopeparams = scope2_beadparams.scope2_beadparams;
-    end
-    vecfield = vectorField_flatrun(params,scopeloc,scopeparams,2);
-    
-    load ./matfiles/xypaireddescriptor paireddescriptor R curvemodel
-    [scopeparams,scopeparams_,paireddescriptor_,curvemodel_] = homographyPerTile6Neighbor(...
-        beadparams,neighbors,scopeloc,paireddescriptor,R,curvemodel,imsize_um);
-    vecfield3D_flat_4neig = vectorField_flatrun_pertile(params,scopeloc,scopeparams_,curvemodel_,[]);
-    save pertile_4neig scopeparams scopeparams_ paireddescriptor_ curvemodel_ vecfield3D_flat_4neig
-end
-%% stitching quality test
-if true
-    fprintf('Running stitching quality test...\n') ;
-    load(fullfile(matfolder,'scopeloc'),'scopeloc','imsize_um','experimentfolder','inputfolder')
-    load(fullfile(matfolder,'vecfield'),'vecfield','params')
-    %%
-    clc
-    params.big = 1;
-    params.dims = [params.imagesize 2]%[1024 1536 251 2]
-    sub = 0;
-    inds_ = inds(1)';
-    neigs = neighbors(inds_,checkthese);
-    targetidx = neigs([1 3])
-    params.root = vecfield.root;
-    %%
-    %
-    params.outfile = sprintf('%s%s-%d_%d_sub_1.tilebase.cache.yml',experimentfolder,date,targetidx);
-    params.outfile
-    vecfield_ = vecfield;
-    vecfield_.path{targetidx(1)} = '/00000';
-    writeYML(params, targetidx(:)', vecfield_)
-    paramoutput = '/groups/mousebrainmicro/mousebrainmicro/cluster/Stitching/2019-03-26/set_parameters_sub'
-    converter(params.outfile,paramoutput,'y1-ccx2-fixxed')
-    %%
-    
-    params.outfile = sprintf('%s%s-%d_%d_sub_2.tilebase.cache.yml',experimentfolder,date,targetidx);
-    params.outfile
-    vecfield_ = vecfield;
-    vecfield_.path{targetidx(2)} = '/00000';
-    writeYML(params, targetidx(:)', vecfield_)
-    paramoutput = '/groups/mousebrainmicro/mousebrainmicro/cluster/Stitching/2019-03-26/set_parameters_sub'
-    converter(params.outfile,paramoutput,'y2-ccx2-fixxed')
-end
+
+
+% %% 0.1: FLAT RUN
+% % generate yml for without any optimization
+% if false
+%     %%
+%     load(scopefile,'scopeloc','neighbors','imsize_um','experimentfolder','inputfolder')
+%     if scope==1
+%         scope1_beadparams = load('./beadparams/scope1_beadparams');
+%         scopeparams = scope1_beadparams.scope1_beadparams;
+%     else
+%         scope2_beadparams = load('./beadparams/scope2_beadparams');
+%         scopeparams = scope2_beadparams.scope2_beadparams;
+%     end
+%     vecfield = vectorField_flatrun(params,scopeloc,scopeparams,2);
+%     
+%     load ./matfiles/xypaireddescriptor paireddescriptor R curvemodel
+%     [scopeparams,scopeparams_,paireddescriptor_,curvemodel_] = homographyPerTile6Neighbor(...
+%         beadparams,neighbors,scopeloc,paireddescriptor,R,curvemodel,imsize_um);
+%     vecfield3D_flat_4neig = vectorField_flatrun_pertile(params,scopeloc,scopeparams_,curvemodel_,[]);
+%     save pertile_4neig scopeparams scopeparams_ paireddescriptor_ curvemodel_ vecfield3D_flat_4neig
+% end
+% %% stitching quality test
+% if true
+%     fprintf('Running stitching quality test...\n') ;
+%     load(fullfile(matfolder,'scopeloc'),'scopeloc','imsize_um','experimentfolder','inputfolder')
+%     load(fullfile(matfolder,'vecfield'),'vecfield','params')
+%     %%
+%     clc
+%     params.big = 1;
+%     params.dims = [params.imagesize 2]%[1024 1536 251 2]
+%     sub = 0;
+%     inds_ = inds(1)';
+%     neigs = neighbors(inds_,checkthese);
+%     targetidx = neigs([1 3])
+%     params.root = vecfield.root;
+%     %%
+%     %
+%     params.outfile = sprintf('%s%s-%d_%d_sub_1.tilebase.cache.yml',experimentfolder,date,targetidx);
+%     params.outfile
+%     vecfield_ = vecfield;
+%     vecfield_.path{targetidx(1)} = '/00000';
+%     writeYML(params, targetidx(:)', vecfield_)
+%     paramoutput = '/groups/mousebrainmicro/mousebrainmicro/cluster/Stitching/2019-03-26/set_parameters_sub'
+%     converter(params.outfile,paramoutput,'y1-ccx2-fixxed')
+%     %%
+%     
+%     params.outfile = sprintf('%s%s-%d_%d_sub_2.tilebase.cache.yml',experimentfolder,date,targetidx);
+%     params.outfile
+%     vecfield_ = vecfield;
+%     vecfield_.path{targetidx(2)} = '/00000';
+%     writeYML(params, targetidx(:)', vecfield_)
+%     paramoutput = '/groups/mousebrainmicro/mousebrainmicro/cluster/Stitching/2019-03-26/set_parameters_sub'
+%     converter(params.outfile,paramoutput,'y2-ccx2-fixxed')
+% end
 end

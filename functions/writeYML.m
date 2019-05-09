@@ -22,7 +22,10 @@ del = sprintf('  ');
 % fn = [fn '.control.yml'];
 
 if ~exist(fileparts(fn),'dir');mkdir(fileparts(fn));end
-fid = fopen(fn, 'w+');
+[fid, message] = fopen(fn, 'w+');
+if fid<0 ,
+    error('Unable to open file %s for appending: %s', fn, message) ;
+end
 fprintf(fid, '%s\n', ['path: ' params.root]);
 % fprintf(fid, '%s\n', ['path: ' tb.root]);
 fprintf(fid, 'tiles:\n');
