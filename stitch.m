@@ -1,4 +1,4 @@
-function stitch(inputfolder,pipelineoutputfolder,experimentfolder)
+function stitch(sample_date_or_input_folder_name,pipelineoutputfolder,experimentfolder)
 %STICHING pipeline. Reads scope generated json file and returns a yml
 %configuration file that goes into renderer. Requires calling cluster jobs
 %to create subresults, i.e. descriptors. These functions can also run in
@@ -27,11 +27,11 @@ function stitch(inputfolder,pipelineoutputfolder,experimentfolder)
 %     --ALT, 2019-05-09
 
 %% MAKE SURE PATHS etc are correct
-runfull = true;
+%runfull = true;
 if nargin==1
     %brain = '2018-08-01';
-    sample_date = inputfolder;
-    inputfolder = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/%s',sample_date);
+    sample_date = sample_date_or_input_folder_name;
+    sample_date_or_input_folder_name = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/%s',sample_date);
     pipelineoutputfolder = sprintf('/nrs/mouselight/pipeline_output/%s',sample_date);
     %arch = lower(computer('arch'));
     if ispc() ,
@@ -52,7 +52,7 @@ piperun = true ;
 
 if piperun
     if isequal(sample_date, '2017-09-25')
-        classifierinput = inputfolder;
+        classifierinput = sample_date_or_input_folder_name;
         descoutput ='/nrs/mouselight/cluster/classifierOutputs/2017-09-25/classifier_output'
         matchoutput = descoutput;
     elseif isequal(sample_date, '2018-08-15')
@@ -97,49 +97,49 @@ matchedfeatfile = fullfile(matfolder,sprintf('feats_ch%s.mat',desc_ch{:})); % ac
 
 %% 0: INTIALIZE
 % read scope files and populate stage coordinates
-if runfull ,  
+if ~exist(scopefile, 'file') ,  
     newdash = 1; % set this to 1 for datasets acquired after 160404
-    [scopeloc] = getScopeCoordinates(inputfolder,newdash);% parse from acqusition files
+    [scopeloc] = getScopeCoordinates(sample_date_or_input_folder_name,newdash);% parse from acqusition files
     [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
-    save(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
+    save(scopefile,'scopeloc','neighbors','experimentfolder')
 end
 
-%% BULLSHIT CURATION STUFF
-% obsolute after pipeline, TODO: fix missing condition for tile runs
-% rather then channel logs
-if false ,  % this part doesn't seem to work if you give the function a single argument...
-    curationH5(classifierinput,classifieroutput)
-    % checkmissingProb(classifierinput,classifieroutput)
-    checkmissingDesc(descinput,descoutput)
-    checkmissingMatch(matchinput,matchoutput)
-end
+% %% BULLSHIT CURATION STUFF
+% % obsolute after pipeline, TODO: fix missing condition for tile runs
+% % rather then channel logs
+% if false ,  % this part doesn't seem to work if you give the function a single argument...
+%     curationH5(classifierinput,classifieroutput)
+%     % checkmissingProb(classifierinput,classifieroutput)
+%     checkmissingDesc(descinput,descoutput)
+%     checkmissingMatch(matchinput,matchoutput)
+% end
 
 %%
 % 1: LOAD MATCHED FEATS
-if runfull ,
+regpts_file_path = fullfile(matfolder,'regpts.mat') ;
+if ~exist(regpts_file_path, 'file') ,
     fprintf('Loading matched features stage...\n') ;
-    load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder');
+    load(scopefile,'scopeloc');
     directions = 'Z';
     checkversion = 1; % 1: loads the version with "checkversion" extension and overwrites existing match if there are more matched points
     % load finished tile matches. find badly matched or missing tile pairs
-    [regpts,featmap] = loadMatchedFeatures(scopeloc,matchfolder,directions,checkversion);
-    
-    save(fullfile(matfolder,'regpts.mat'), '-v7.3', 'regpts', 'featmap')
-    if ~exist(fullfile(matfolder,'regpts_1stiter.mat'),'file') % faster to make a copy
-        unix(sprintf('cp %s %s',fullfile(matfolder,'regpts.mat'),fullfile(matfolder,'regpts_1stiter.mat')))
-    end
+    [regpts,featmap] = loadMatchedFeatures(scopeloc,matchfolder,directions,checkversion);    
+    save(regpts_file_path, '-v7.3', 'regpts', 'featmap')
+end
+if ~exist(fullfile(matfolder,'regpts_1stiter.mat'),'file') % faster to make a copy
+    unix(sprintf('cp %s %s',regpts_file_path,fullfile(matfolder,'regpts_1stiter.mat')))
 end
 
-if false ,  % iterate on missing tiles (ANOTHER BULLSHIT)    
-    addpath(genpath('/groups/mousebrainmicro/home/base/CODE/MATLAB/pipeline/zmatch_pipe'),'-end')
-    %pointmatch_task(brain,runlocal)
-    directions = 'Z';
-    ch=desc_ch{1};
-    [~,sample] = fileparts(experimentfolder);
-    runlocal=1;
-    pointmatch_task_local(sample,inputfolder,descriptorfolder,matchfolder,matfolder,directions,ch,runlocal)
-    rmpath(genpath('/groups/mousebrainmicro/home/base/CODE/MATLAB/pipeline/zmatch_pipe'))
-end
+% if false ,  % iterate on missing tiles (ANOTHER BULLSHIT)    
+%     addpath(genpath('/groups/mousebrainmicro/home/base/CODE/MATLAB/pipeline/zmatch_pipe'),'-end')
+%     %pointmatch_task(brain,runlocal)
+%     directions = 'Z';
+%     ch=desc_ch{1};
+%     [~,sample] = fileparts(experimentfolder);
+%     runlocal=1;
+%     pointmatch_task_local(sample,inputfolder,descriptorfolder,matchfolder,matfolder,directions,ch,runlocal)
+%     rmpath(genpath('/groups/mousebrainmicro/home/base/CODE/MATLAB/pipeline/zmatch_pipe'))
+% end
 
 %%
 % 2 scope params estimation.
@@ -148,11 +148,11 @@ end
 % iii) creates a 3D affine model by jointly solving a linear system of
 % equations
 
-if runfull ,
-    
+scope_params_per_tile_file_path = fullfile(matfolder,'scopeparams_pertile.mat') ;
+if ~exist(descriptorfile, 'file') || ~exist(scope_params_per_tile_file_path, 'file') ,   
     %%
     fprintf('Running tileProcessor stage...\n') ;
-    load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
+    load(scopefile,'scopeloc')
     % paramater setting for descrtiptor match
     scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));
     % params.sample = brain;
@@ -172,51 +172,53 @@ if runfull ,
     params.beadparams = [];%PLACEHOLDER FOR BEADS, very unlikely to have it...
     params.singleTile = 1;
 
-    if 0
-        [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
-            tileProcessor_debug(scopeloc,descriptorfolder,desc_ch,params);
-    else
-        [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
-            tileProcessor(scopeloc,descriptorfolder,desc_ch,params);
-        save(descriptorfile,'descriptors','-v7.3')
-        save(fullfile(matfolder,'scopeparams_pertile'),'paireddescriptor', ...
-            'scopeparams', 'curvemodel','params','-v7.3')
-    end
+%     if 0
+%         [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
+%             tileProcessor_debug(scopeloc,descriptorfolder,desc_ch,params);
+%     else
+    [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
+        tileProcessor(scopeloc,descriptorfolder,desc_ch,params);
+    save(descriptorfile,'descriptors','-v7.3')
+    save(scope_params_per_tile_file_path,'paireddescriptor', ...
+        'scopeparams', 'curvemodel','params','-v7.3')
+%     end
 end
 
 %%
-if runfull ,
+video_file_path = fullfile(pwd(), 'videos', sprintf('%s-1stiter-ch1-%s.avi',sample_date,date())) ;
+if ~exist(video_file_path, 'file') ,
     %%
     fprintf('Running descriptorMatchQuality stage...\n') ;
-    load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
-    load(fullfile(matfolder,'scopeparams_pertile'),'scopeparams')
-    load(fullfile(matfolder,'regpts'),'regpts')
-    mkdir('./videos')
-    videofile = sprintf('./videos/%s-1stiter-ch1-%s',sample_date,date())
-    descriptorMatchQuality(regpts,scopeparams{end},scopeloc,videofile)
-    %     createThumb(regpts,scopeparams,scopeloc,videofile)
-    % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,videofile)
-%     descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,videofile)
+    load(scopefile,'scopeloc')
+    load(scope_params_per_tile_file_path,'scopeparams')
+    load(regpts_file_path,'regpts')
+    if ~exist('./videos', 'file') ,
+        mkdir('./videos')
+    end
+    descriptorMatchQuality(regpts,scopeparams{end},scopeloc,video_file_path)
+    %     createThumb(regpts,scopeparams,scopeloc,video_file_path)
+    % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,video_file_path)
+%     descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,video_file_path)
 end
 
 %%
-if runfull ,
+vecfield3D_file_path = fullfile(matfolder,'vecfield3D.mat') ;
+if ~exist(vecfield3D_file_path, 'file') ,
     fprintf('Running vectorField3D stage...\n') ;
-    load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
-    load(fullfile(matfolder,'regpts'),'regpts')
-    load(fullfile(matfolder,'scopeparams_pertile'),'paireddescriptor', ...
-        'scopeparams', 'curvemodel','params')
+    load(scopefile,'scopeloc')
+    load(regpts_file_path,'regpts')
+    load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params')
     
     vecfield3D = vectorField3D(params,scopeloc,regpts,scopeparams{end},curvemodel{end},[]);
-    if 1
-        save(fullfile(matfolder,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params')
-        save(fullfile(matfolder,'vecfield3D'),'vecfield3D','params')
-    end
+    save(vecfield3D_file_path,'vecfield3D','params')
+    save(fullfile(matfolder,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params')
 end
+
+% Finally, output the yaml file(s)
 %%
 % 4
-load(scopefile,'scopeloc','neighbors','experimentfolder','inputfolder')
-load(fullfile(matfolder,'vecfield3D'),'vecfield3D','params')
+load(scopefile,'scopeloc','experimentfolder')
+load(vecfield3D_file_path,'vecfield3D','params')
 vecfield = vecfield3D;
 
 %%
@@ -239,7 +241,7 @@ writeYML(params, targetidx(:)', vecfield);
 unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache.yml')));
 %
 if ~sub
-    params.big=0
+    params.big=0 ;
     params.outfile = sprintf('%s/%s.old.control.yml',experimentfolder,date);
     writeYML(params, targetidx(:)', vecfield)
     unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache_old.yml')))
