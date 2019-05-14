@@ -4,6 +4,12 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 %to create subresults, i.e. descriptors. These functions can also run in
 %local machines with proper settings.
 %
+% Note that pipeline_output_folder_path points to files that are used as
+% *input* to this function.
+%
+% All outputs are stored in the folder stitching_output_folder_path.
+%
+%
 % [OUTPUTARGS] = STICHING(jsonfile)
 %
 % Inputs:
@@ -25,6 +31,14 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
 % I've only ever called this like e.g. "stitch('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/2019-03-26')"  
 %     --ALT, 2019-05-09
+
+% The recommended way to call this, in most cases, is with three arguments.
+% E.g.
+%     tile_folder_path = '/groups/mousebrainmicro/mousebrainmicro/data/2019-04-17/Tiling' ;
+%     pipeline_output_folder = '/nrs/mouselight/pipeline_output/2019-04-17' ;
+%     stitching_output_folder_path = '/nrs/mouselight/cluster/classifierOutputs/2019-04-17/stitching-output' ;
+%     stitch(tile_folder_path, pipeline_output_folder, stitching_output_folder_path) ;
+
 
 %% MAKE SURE PATHS etc are correct
 %runfull = true;
@@ -74,14 +88,14 @@ end
 %matfolder = fullfile(stitching_output_folder_path,'matfiles/');
 %stitching_output_folder_path = stitching_output_folder_path ;
 
+unix('umask u+gxw,g+rxw,o+rx') ;
 if ~exist(stitching_output_folder_path, 'file') ,
     mkdir(stitching_output_folder_path) ;
 end
-unix(sprintf('chmod g+rxw %s',stitching_output_folder_path));
-unix(sprintf('umask g+rxw %s',stitching_output_folder_path));
-if ~exist(stitching_output_folder_path, 'file') ,
-    mkdir(stitching_output_folder_path) ;
-end
+%unix(sprintf('chmod g+rxw %s',stitching_output_folder_path));
+% if ~exist(stitching_output_folder_path, 'file') ,
+%     mkdir(stitching_output_folder_path) ;
+% end
 
 
 scopefile = fullfile(stitching_output_folder_path,'scopeloc.mat');
