@@ -202,7 +202,7 @@ if ~exist(descriptorfile, 'file') || ~exist(scope_params_per_tile_file_path, 'fi
 end
 
 %%
-video_file_path = fullfile(pwd(), 'videos', sprintf('%s-1stiter-ch1-%s.avi',sample_date,date())) ;
+video_file_path = fullfile(stitching_output_folder_path, sprintf('%s-1stiter-ch1-%s.avi',sample_date,date())) ;
 if ~exist(video_file_path, 'file') ,
     %%
     fprintf('Running descriptorMatchQuality stage...\n') ;
