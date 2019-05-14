@@ -54,7 +54,9 @@ if N > 0
         disp(['  0%[>', repmat(' ', 1, w), ']']);
     end
 elseif N == 0
-    delete('parfor_progress.txt');
+    if exist('parfor_progress.txt', 'file') ,
+        delete('parfor_progress.txt');
+    end
     percent = 100;
     
     if nargout == 0
