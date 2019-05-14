@@ -1,4 +1,4 @@
-function stitch(sample_date_or_input_folder_name,pipelineoutputfolder,experimentfolder)
+function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_folder_path)
 %STICHING pipeline. Reads scope generated json file and returns a yml
 %configuration file that goes into renderer. Requires calling cluster jobs
 %to create subresults, i.e. descriptors. These functions can also run in
@@ -23,25 +23,28 @@ function stitch(sample_date_or_input_folder_name,pipelineoutputfolder,experiment
 % $Author: base $	$Date: 2016/09/21 11:52:40 $
 % Copyright: HHMI 2016
 
-% I've only ever called this like e.g. "stitch('2019-03-26')"  
+% I've only ever called this like e.g. "stitch('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/2019-03-26')"  
 %     --ALT, 2019-05-09
 
 %% MAKE SURE PATHS etc are correct
 %runfull = true;
-if nargin==1
-    %brain = '2018-08-01';
-    sample_date = sample_date_or_input_folder_name;
-    sample_date_or_input_folder_name = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/acquisition/%s',sample_date);
-    pipelineoutputfolder = sprintf('/nrs/mouselight/pipeline_output/%s',sample_date);
-    %arch = lower(computer('arch'));
+if ~exist('tile_folder_path', 'var') || isempty(tile_folder_path) ,
+    error('Need a tile folder path, at least')
+end
+sample_date = sample_date_from_input_folder_path(tile_folder_path)  %#ok<NOPRT>
+
+if ~exist('pipeline_output_folder_path', 'var') || isempty(pipeline_output_folder_path) ,
+    pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s',sample_date);
+end
+
+if ~exist('stitching_output_folder_path', 'var') || isempty(stitching_output_folder_path) ,
     if ispc() ,
         error('windows machine, set the input using input arguments')
     else
-        experimentfolder = sprintf('/nrs/mouselight/cluster/classifierOutputs/%s-%s', sample_date, getenv('USER'));
+        stitching_output_folder_path = sprintf('/nrs/mouselight/cluster/classifierOutputs/%s/stitching-output', sample_date);
     end    
-elseif nargin<1
-    error('At least pass brain id')
 end
+experimentfolder = stitching_output_folder_path ;  % for backwards compatibility
 
 addpath(genpath('./common'))
 addpath(genpath('./functions'))
@@ -52,54 +55,54 @@ piperun = true ;
 
 if piperun
     if isequal(sample_date, '2017-09-25')
-        classifierinput = sample_date_or_input_folder_name;
-        descoutput ='/nrs/mouselight/cluster/classifierOutputs/2017-09-25/classifier_output'
+        %classifierinput = input_folder_path;
+        descoutput ='/nrs/mouselight/cluster/classifierOutputs/2017-09-25/classifier_output' ;
         matchoutput = descoutput;
     elseif isequal(sample_date, '2018-08-15')
-        descoutput = fullfile(pipelineoutputfolder,'stage_2_descriptor_output')
-        matchinput = descoutput;
-        matchoutput = fullfile(pipelineoutputfolder,'stage_3_point_match_output')
+        descoutput = fullfile(pipeline_output_folder_path,'stage_2_descriptor_output') ;
+        %matchinput = descoutput;
+        matchoutput = fullfile(pipeline_output_folder_path,'stage_3_point_match_output') ;
     else
-        classifieroutput = fullfile(pipelineoutputfolder,'stage_2_classifier_output')
-        descinput = classifieroutput;
-        descoutput = fullfile(pipelineoutputfolder,'stage_3_descriptor_output')
-        matchinput = descoutput;
-        matchoutput = fullfile(pipelineoutputfolder,'stage_4_point_match_output')
+        %classifieroutput = fullfile(pipeline_output_folder_path,'stage_2_classifier_output') ;
+        %descinput = classifieroutput;
+        descoutput = fullfile(pipeline_output_folder_path,'stage_3_descriptor_output') ;
+        %matchinput = descoutput;
+        matchoutput = fullfile(pipeline_output_folder_path,'stage_4_point_match_output') ;
     end
 end
 
+%matfolder = fullfile(stitching_output_folder_path,'matfiles/');
+%stitching_output_folder_path = stitching_output_folder_path ;
 
-matfolder = fullfile(experimentfolder,'matfiles/');
-
-if ~exist(experimentfolder, 'file') ,
-    mkdir(experimentfolder) ;
+if ~exist(stitching_output_folder_path, 'file') ,
+    mkdir(stitching_output_folder_path) ;
 end
-unix(sprintf('chmod g+rxw %s',experimentfolder));
-unix(sprintf('umask g+rxw %s',experimentfolder));
-if ~exist(matfolder, 'file') ,
-    mkdir(matfolder) ;
+unix(sprintf('chmod g+rxw %s',stitching_output_folder_path));
+unix(sprintf('umask g+rxw %s',stitching_output_folder_path));
+if ~exist(stitching_output_folder_path, 'file') ,
+    mkdir(stitching_output_folder_path) ;
 end
 
 
-scopefile = fullfile(matfolder,'scopeloc.mat');
+scopefile = fullfile(stitching_output_folder_path,'scopeloc.mat');
 if piperun
     descriptorfolder = descoutput;
     matchfolder = matchoutput;
 else
-    descriptorfolder = fullfile(experimentfolder,'classifier_output');
+    descriptorfolder = fullfile(stitching_output_folder_path,'classifier_output');  %#ok<UNRCH>
     matchfolder = descriptorfolder;
 end
 
 desc_ch = {'0'};
-descriptorfile = fullfile(matfolder,sprintf('descriptors_ch%s.mat',desc_ch{:})); % accumulated descriptor file
-matchedfeatfile = fullfile(matfolder,sprintf('feats_ch%s.mat',desc_ch{:})); % accumulated descriptor file
+descriptorfile = fullfile(stitching_output_folder_path,sprintf('descriptors_ch%s.mat',desc_ch{:})); % accumulated descriptor file
+%matchedfeatfile = fullfile(matfolder,sprintf('feats_ch%s.mat',desc_ch{:})); % accumulated descriptor file
 
 
 %% 0: INTIALIZE
 % read scope files and populate stage coordinates
 if ~exist(scopefile, 'file') ,  
     newdash = 1; % set this to 1 for datasets acquired after 160404
-    [scopeloc] = getScopeCoordinates(sample_date_or_input_folder_name,newdash);% parse from acqusition files
+    [scopeloc] = getScopeCoordinates(tile_folder_path,newdash);% parse from acqusition files
     [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
     save(scopefile,'scopeloc','neighbors','experimentfolder')
 end
@@ -116,7 +119,7 @@ end
 
 %%
 % 1: LOAD MATCHED FEATS
-regpts_file_path = fullfile(matfolder,'regpts.mat') ;
+regpts_file_path = fullfile(stitching_output_folder_path,'regpts.mat') ;
 if ~exist(regpts_file_path, 'file') ,
     fprintf('Loading matched features stage...\n') ;
     load(scopefile,'scopeloc');
@@ -126,8 +129,8 @@ if ~exist(regpts_file_path, 'file') ,
     [regpts,featmap] = loadMatchedFeatures(scopeloc,matchfolder,directions,checkversion);    
     save(regpts_file_path, '-v7.3', 'regpts', 'featmap')
 end
-if ~exist(fullfile(matfolder,'regpts_1stiter.mat'),'file') % faster to make a copy
-    unix(sprintf('cp %s %s',regpts_file_path,fullfile(matfolder,'regpts_1stiter.mat')))
+if ~exist(fullfile(stitching_output_folder_path,'regpts_1stiter.mat'),'file') % faster to make a copy
+    unix(sprintf('cp %s %s',regpts_file_path,fullfile(stitching_output_folder_path,'regpts_1stiter.mat')))
 end
 
 % if false ,  % iterate on missing tiles (ANOTHER BULLSHIT)    
@@ -148,7 +151,7 @@ end
 % iii) creates a 3D affine model by jointly solving a linear system of
 % equations
 
-scope_params_per_tile_file_path = fullfile(matfolder,'scopeparams_pertile.mat') ;
+scope_params_per_tile_file_path = fullfile(stitching_output_folder_path,'scopeparams_pertile.mat') ;
 if ~exist(descriptorfile, 'file') || ~exist(scope_params_per_tile_file_path, 'file') ,   
     %%
     fprintf('Running tileProcessor stage...\n') ;
@@ -202,7 +205,7 @@ if ~exist(video_file_path, 'file') ,
 end
 
 %%
-vecfield3D_file_path = fullfile(matfolder,'vecfield3D.mat') ;
+vecfield3D_file_path = fullfile(stitching_output_folder_path,'vecfield3D.mat') ;
 if ~exist(vecfield3D_file_path, 'file') ,
     fprintf('Running vectorField3D stage...\n') ;
     load(scopefile,'scopeloc')
@@ -211,15 +214,15 @@ if ~exist(vecfield3D_file_path, 'file') ,
     
     vecfield3D = vectorField3D(params,scopeloc,regpts,scopeparams{end},curvemodel{end},[]);
     save(vecfield3D_file_path,'vecfield3D','params')
-    save(fullfile(matfolder,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params')
+    save(fullfile(stitching_output_folder_path,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params')
 end
 
 % Finally, output the yaml file(s)
 %%
 % 4
-load(scopefile,'scopeloc','experimentfolder')
-load(vecfield3D_file_path,'vecfield3D','params')
-vecfield = vecfield3D;
+load(scopefile,'scopeloc') ;
+load(vecfield3D_file_path,'vecfield3D','params') ;
+vecfield = vecfield3D ;
 
 %%
 % checkthese = [1 4 5 7]; % 0 - right - bottom - below
@@ -230,21 +233,21 @@ sub = false ;
 params.root = vecfield.root;
 
 if sub
-    targetidx = getTargetIDx(scopeloc,neighbors);
+    targetidx = getTargetIDx(scopeloc,neighbors);  %#ok<UNRCH>
     copytiles2target('./test_copt',scopeloc,targetidx(1))
-    params.outfile = fullfile(experimentfolder,sprintf('%s_sub.control.yml',date));
+    params.outfile = fullfile(stitching_output_folder_path,sprintf('%s_sub.control.yml',date));
 else
     targetidx = 1:size(scopeloc.gridix,1);
-    params.outfile = fullfile(experimentfolder,sprintf('%s.control.yml',date));
+    params.outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date));
 end
 writeYML(params, targetidx(:)', vecfield);
-unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache.yml')));
+unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache.yml')));
 %
 if ~sub
     params.big=0 ;
-    params.outfile = sprintf('%s/%s.old.control.yml',experimentfolder,date);
+    params.outfile = sprintf('%s/%s.old.control.yml',stitching_output_folder_path,date);
     writeYML(params, targetidx(:)', vecfield)
-    unix(sprintf('cp %s %s',params.outfile,fullfile(experimentfolder,'tilebase.cache_old.yml')))
+    unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache_old.yml')))
 end
 return
 

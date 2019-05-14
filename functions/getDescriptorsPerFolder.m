@@ -20,13 +20,14 @@ function [des] = getDescriptorsPerFolder(descriptorfolder,scopeloc,desc_ch,ext_d
 if nargin<4
     ext_desc = 'txt';
 end
-myfiles = dir(fullfile(descriptorfolder,scopeloc.relativepaths{10008},['*.',ext_desc]));
+%myfiles = dir(fullfile(descriptorfolder,scopeloc.relativepaths{10008},['*.',ext_desc]));
+myfiles = dir(fullfile(descriptorfolder,scopeloc.relativepaths{round(end/2)},['*.',ext_desc])) ;
 fid = fopen(fullfile(myfiles(1).folder,myfiles(1).name));
 tLines = fgets(fid);
+fclose(fid) ;
 delimiter = ' '; %or whatever
 if length(tLines)>1
     numCols = numel(strfind(tLines,delimiter)) + 1;
-    fclose(fid);
 else
     error('EMPTY DESCRIPTOR FILE !!')
 end
@@ -73,7 +74,7 @@ else
         if ~rem(ii,1000)
             ii
         end
-        if isempty(desc(ii).value{1})|isempty(desc(ii).value{2})
+        if isempty(desc(ii).value{1}) || isempty(desc(ii).value{2})
             continue
         end
         pd2 = pdist2(desc(ii).value{1},desc(ii).value{2});
