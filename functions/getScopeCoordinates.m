@@ -1,4 +1,4 @@
-function [scope] = getScopeCoordinates(inputfolder,newdash)
+function scope = getScopeCoordinates(tile_folder_path, is_sample_post_2016_04_04)
 %GETSCOPECOORDINATES Summary of this function goes here
 %
 % [OUTPUTARGS] = GETSCOPECOORDINATES(INPUTARGS) Explain usage here
@@ -16,13 +16,16 @@ function [scope] = getScopeCoordinates(inputfolder,newdash)
 % $Author: base $	$Date: 2016/09/21 16:33:49 $	$Revision: 0.1 $
 % Copyright: HHMI 2016
 
+% Recurse through the input tiles folder, collecting the names of the
+% .acquisition files.  Store those in scopeacquisitionlist.txt
+args = struct() ;
 args.level = 3;
 args.ext = 'acquisition';
-args.skip = {''}
-args.keep = {''}
-args.pattern = '\d'
-opt.seqtemp = fullfile(inputfolder,'scopeacquisitionlist.txt');
-opt.inputfolder = inputfolder;
+args.skip = {''};
+args.keep = {''};
+args.pattern = '\d';
+opt.seqtemp = fullfile(tile_folder_path,'scopeacquisitionlist-alt.txt');
+opt.inputfolder = tile_folder_path;
 % if exist(opt.seqtemp, 'file') == 2
 %     % load file directly
 % else
@@ -30,26 +33,29 @@ args.fid = fopen(opt.seqtemp,'w');
 recdir(opt.inputfolder,args)
 % end
 
+% Now read the file we just wrote, and make an in-memory list of the .acquisition files
 fid=fopen(opt.seqtemp,'r');
 inputfiles = textscan(fid,'%s');
 inputfiles = inputfiles{1};
 fclose(fid);
+input_file_count = length(inputfiles) ;
 
-[gridix,loc] = deal(cell(1,size(inputfiles,1)));
-if newdash
-    parfor_progress(size(inputfiles,1));
-    for ifile = 1:size(inputfiles,1)
-        parfor_progress;
+gridix = cell(1,input_file_count) ;
+loc = cell(1,input_file_count) ;
+if is_sample_post_2016_04_04 ,
+    parfor_progress(input_file_count);
+    for ifile = 1:input_file_count
+        parfor_progress();
         scvals = util.scopeparser(inputfiles{ifile});
-        gridix{ifile} = [scvals.x+1 scvals.y+1 scvals.z+1 scvals.cut_count];  % the +1's are to convert zero-based indices to one-based
+        gridix{ifile} = [scvals.x scvals.y scvals.z+1 scvals.cut_count];  % sometimes there's a z=0 tile, so we shift up to accomodate Matlab indexing
         loc{ifile} = [scvals.x_mm scvals.y_mm scvals.z_mm];
     end
     parfor_progress(0);
     grids = cat(1,gridix{:});
     locs = cat(1,loc{:});
 else
-    parfor_progress(size(inputfiles,1));
-    parfor ifile = 1:size(inputfiles,1)
+    parfor_progress(input_file_count);
+    parfor ifile = 1:input_file_count
         parfor_progress;
         scvals = scopeparser(inputfiles{ifile});
         loc{ifile} = [scvals.x_mm scvals.y_mm scvals.z_mm];
@@ -86,11 +92,15 @@ else
     
 end
 
+% Make a list of all the relative paths to the .acquisition files, relative
+% to the input tile folder
 relativepaths = cell(length(inputfiles),1);
 for ii=1:length(inputfiles)
-    relativepaths{ii} = fileparts(inputfiles{ii}(length(inputfolder)+1:end));
+    relativepaths{ii} = fileparts(inputfiles{ii}(length(tile_folder_path)+1:end));
 end
 
+% Store everything in the scope structure for return to caller
+scope = struct() ;
 scope.gridix = grids ;
 scope.loc = locs;
 scope.filepath = inputfiles;

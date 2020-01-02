@@ -1,5 +1,5 @@
-function [neighbors] = buildNeighbor(grididx)
-%BUILDNEIGHBOR Given grid location, builds an connectivity matrix and
+function neighbors = buildNeighbor(grididx)
+%BUILDNEIGHBOR Given grid location, builds a connectivity matrix and
 %neighbor edge graph
 % 
 % [NEIGHBORS] = BUILDNEIGHBOR(GRIDIDX) 

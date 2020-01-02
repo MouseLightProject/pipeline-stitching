@@ -88,9 +88,6 @@ end
 %matfolder = fullfile(stitching_output_folder_path,'matfiles/');
 %stitching_output_folder_path = stitching_output_folder_path ;
 
-% Use all the cores
-use_this_fraction_of_cores(1) ;
-
 unix('umask u=rwx,g=rwx,o=rx') ;
 if ~exist(stitching_output_folder_path, 'file') ,
     mkdir(stitching_output_folder_path) ;
@@ -247,28 +244,33 @@ vecfield = vecfield3D ;
 % [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
 params.big = 1;
 params.ymldims = [params.imagesize 2];%[1024 1536 251 2]
-sub = false ;
 params.root = vecfield.root;
 
-if sub
-    targetidx = getTargetIDx(scopeloc,neighbors);  %#ok<UNRCH>
-    copytiles2target('./test_copt',scopeloc,targetidx(1))
-    params.outfile = fullfile(stitching_output_folder_path,sprintf('%s_sub.control.yml',date));
-else
-    targetidx = 1:size(scopeloc.gridix,1);
-    params.outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date));
-end
-writeYML(params, targetidx(:)', vecfield);
-unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache.yml'))) ;
-%
-if ~sub
-    params.big=0 ;
-    params.outfile = sprintf('%s/%s.old.control.yml',stitching_output_folder_path,date);
-    writeYML(params, targetidx(:)', vecfield)
-    unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache_old.yml'))) ;
-end
+% sub = false ;
+% if sub
+%     targetidx = getTargetIDx(scopeloc,neighbors);  %#ok<UNRCH>
+%     copytiles2target('./test_copt',scopeloc,targetidx(1))
+%     params.outfile = fullfile(stitching_output_folder_path,sprintf('%s_sub.control.yml',date));
+% else
+%     targetidx = 1:size(scopeloc.gridix,1);
+%     params.outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date));
+% end
+% writeYML(params, targetidx(:)', vecfield);
+% unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache.yml')));
+% if ~sub
+%     params.big=0 ;
+%     params.outfile = sprintf('%s/%s.old.control.yml',stitching_output_folder_path,date);
+%     writeYML(params, targetidx(:)', vecfield)
+%     unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache_old.yml')))
+% end
 
-fprintf('Done with stitching.\n') ;
+targetidx = 1:size(scopeloc.gridix,1) ;
+params.outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date())) ;
+writeYML(params, targetidx(:)', vecfield) ;
+unix(sprintf('cp %s %s', params.outfile, fullfile(stitching_output_folder_path,'tilebase.cache.yml'))) ;
+
+return
+
 
 % %% 0.1: FLAT RUN
 % % generate yml for without any optimization
