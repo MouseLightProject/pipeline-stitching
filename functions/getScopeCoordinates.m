@@ -24,7 +24,7 @@ args.ext = 'acquisition';
 args.skip = {''};
 args.keep = {''};
 args.pattern = '\d';
-opt.seqtemp = fullfile(tile_folder_path,'scopeacquisitionlist-alt.txt');
+opt.seqtemp = fullfile(tile_folder_path,'scopeacquisitionlist.txt');
 opt.inputfolder = tile_folder_path;
 % if exist(opt.seqtemp, 'file') == 2
 %     % load file directly
@@ -47,11 +47,12 @@ if is_sample_post_2016_04_04 ,
     for ifile = 1:input_file_count
         parfor_progress();
         scvals = util.scopeparser(inputfiles{ifile});
-        gridix{ifile} = [scvals.x scvals.y scvals.z+1 scvals.cut_count];  % sometimes there's a z=0 tile, so we shift up to accomodate Matlab indexing
+        gridix{ifile} = [scvals.x scvals.y scvals.z scvals.cut_count];
         loc{ifile} = [scvals.x_mm scvals.y_mm scvals.z_mm];
     end
     parfor_progress(0);
-    grids = cat(1,gridix{:});
+    raw_grids = cat(1,gridix{:});
+    grids = shift_zs(raw_grids) ;  % sometimes there are z=0 or a z=-1 tiles, so we shift up to accomodate Matlab indexing
     locs = cat(1,loc{:});
 else
     parfor_progress(input_file_count);
@@ -105,4 +106,18 @@ scope.gridix = grids ;
 scope.loc = locs;
 scope.filepath = inputfiles;
 scope.relativepaths = relativepaths;
+end
+
+
+function result = shift_zs(grids)
+    % sometimes there are z=0 or a z=-1 tiles, so we shift up to accomodate Matlab indexing
+    zs = grids(:,3) ;
+    min_z = min(zs) ;
+    if min_z<1 ,
+        new_zs = zs-min_z+1 ;
+        result = grids ;
+        result(:,3) = new_zs ;
+    else
+        result = grids ;
+    end    
 end

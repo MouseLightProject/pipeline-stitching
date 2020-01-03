@@ -192,6 +192,8 @@ parfor ineig = 1:Ntiles%5163%[5162 5163 5164]%Ntiles%find(neigs(:,1)==5463)%1:si
             pinit_model = matchparams.init_array(:,:,ineig);
         elseif isfield(matchparams,'init')
             pinit_model = matchparams.init;
+        else
+            error('Unable to initialize pinit_model') ;
         end
 %         pinit_model
 %         [X_e,Y_e,out_e,valid_e] = match.fcestimate(X_,Y_,iadj,matchparams,pinit_model);
