@@ -3,6 +3,5 @@ function modpath()
     path_to_this_folder = fileparts(path_to_this_file) ;
     addpath(genpath(fullfile(path_to_this_folder, 'common'))) ;
     addpath(genpath(fullfile(path_to_this_folder, 'functions'))) ;
+    addpath(fullfile(path_to_this_folder, 'mouselight_toolbox')) ;
 end
-
-
