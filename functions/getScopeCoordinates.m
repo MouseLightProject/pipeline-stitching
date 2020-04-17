@@ -1,4 +1,4 @@
-function scope = getScopeCoordinates(tile_folder_path, is_sample_post_2016_04_04)
+function scope = getScopeCoordinates(stitching_output_folder_path, tile_folder_path, is_sample_post_2016_04_04)
 %GETSCOPECOORDINATES Summary of this function goes here
 %
 % [OUTPUTARGS] = GETSCOPECOORDINATES(INPUTARGS) Explain usage here
@@ -24,7 +24,7 @@ args.ext = 'acquisition';
 args.skip = {''};
 args.keep = {''};
 args.pattern = '\d';
-opt.seqtemp = fullfile(tile_folder_path,'scopeacquisitionlist.txt');
+opt.seqtemp = fullfile(stitching_output_folder_path, 'scopeacquisitionlist.txt') ;
 opt.inputfolder = tile_folder_path;
 % if exist(opt.seqtemp, 'file') == 2
 %     % load file directly

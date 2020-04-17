@@ -119,8 +119,8 @@ descriptorfile = fullfile(stitching_output_folder_path,sprintf('descriptors_ch%s
 % Read .acquisition file for each tile, and populate scopeloc with the
 % stage positions of each tile.
 if ~exist(scopefile, 'file') ,  
-    newdash = 1; % set this to 1 for datasets acquired after 160404
-    scopeloc = getScopeCoordinates(tile_folder_path, newdash) ;  % parse from acqusition files
+    is_sample_post_2016_04_04 = true ;  % set this to 1 for datasets acquired after 160404
+    scopeloc = getScopeCoordinates(stitching_output_folder_path, tile_folder_path, is_sample_post_2016_04_04) ;  % parse from acqusition files
     neighbors = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
     save(scopefile,'scopeloc','neighbors','experimentfolder')
 end
