@@ -135,7 +135,7 @@ interiorTile_list = util.interior_tiles(scopeloc,1);
 
 %%
 try parfor_progress(0);catch;end
-parfor_progress(Ntiles)
+parfor_progress(Ntiles) ;
 
 parfor ineig = 1:Ntiles%5163%[5162 5163 5164]%Ntiles%find(neigs(:,1)==5463)%1:size(neigs,1)%5162
     %% load descriptor pairs X (center) - Y (adjacent tile)

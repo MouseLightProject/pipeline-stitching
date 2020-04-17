@@ -50,7 +50,7 @@ G = sparse(edges(:,1),edges(:,2),edges(:,3),Ntiles,Ntiles);
 G = max(G,G');
 
 %%
-parfor_progress(Ntiles)
+parfor_progress(Ntiles) ;
 if old
     skipinds = any(isnan(neigs4(:,[4 5])),2);
 else

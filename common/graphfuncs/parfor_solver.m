@@ -5,7 +5,7 @@ mylist = cell(numbr,1);
 neig_size=cellfun(@length,nodeBrid);
 %%
 try parfor_progress(0);catch;end
-parfor_progress(numbr)
+parfor_progress(numbr) ;
 tic
 for ibr=1:numbr
     %%
@@ -33,7 +33,7 @@ for ibr=1:numbr
     mylist{ibr} = [from*ones(length(to),1) to(:) dfromto(:)];
     parfor_progress;
 end
-parfor_progress(0)
+parfor_progress(0) ;
 sprintf('Branch-Con DONE in %d sec',round(toc))
 
 

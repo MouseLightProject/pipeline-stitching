@@ -33,7 +33,7 @@ clear Gcomps BR;
 mytic = tic;
 try;parfor_progress(0);catch;end
 tic
-parfor_progress(S)
+parfor_progress(S) ;
 parfor idxC = 1:S
     parfor_progress;
     A_ = A(CompsC{idxC},CompsC{idxC});

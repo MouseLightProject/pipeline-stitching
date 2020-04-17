@@ -77,7 +77,7 @@ paireddesctemp{2}.X = [];
 paireddesctemp{2}.Y = [];
 %
 Ntiles = size(neigs,1);
-parfor_progress(Ntiles)
+parfor_progress(Ntiles) ;
 parfor ineig = 1:Ntiles%Ntiles%find(neigs(:,1)==5463)%1:size(neigs,1)
     %% load descriptor pairs X (center) - Y (adjacent tile)
     idxcent = neigs(ineig,1);
