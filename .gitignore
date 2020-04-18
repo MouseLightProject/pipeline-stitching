@@ -11,3 +11,5 @@ parfor_progress.txt
 
 2019-05-27-test-stitching-output
 stitch_2019_11-11_last_plane.m
+
+*.out.txt
