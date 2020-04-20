@@ -86,9 +86,9 @@ parfor itile = 1:Ntiles ,
     scopeparams(itile).dims = dims;
     neiginds = find(G(itile,:));
     theseinds = setdiff(neiginds,paireddescriptor{itile}.neigs(2:3));
-    
+
     if skipinds(itile)
-        
+
     else
         allX = [] ;
         allY = [] ;
@@ -112,7 +112,7 @@ parfor itile = 1:Ntiles ,
             sdisp = [sdisp,1000*stgdisp(:,end)*ones(1,siz(end))];  
             validthis(itile) = 1;
         end
-        
+
         if ~isempty(theseinds) && ~old
             % check left/above
             for ii=1:length(theseinds)
@@ -141,24 +141,24 @@ parfor itile = 1:Ntiles ,
                 end
             end
         end
-        
-%         if isfield(params,'beadparams') & ~isempty(params.beadparams)
-%             % append bead params if exists
-%             beadparamsZmatch_X = params.beadparams.allX{3};
-%             beadparamsZmatch_Y = params.beadparams.allY{3};
-%             beadparamsZmatchdispstage = params.beadparams.dispstage{3};
-%         else
-%             num = max(1,round(size(allX,1)/2));
-%             beadparamsZmatch_X=ones(num,1)*[0 0 250];
-%             beadparamsZmatch_Y=ones(num,1)*[0 0 0];
-%             beadparamsZmatchdispstage = [ones(num,1)*[0 0 250]*1e3]';
-%         end
-%         siz(end+1) = size(beadparamsZmatch_X,1);
-%         allX = [allX;beadparamsZmatch_X];
-%         allY = [allY;beadparamsZmatch_Y];
-%         sdisp = [sdisp,beadparamsZmatchdispstage];
-%         allXFC = allX;
-%         allYFC = allY;
+
+        if isfield(params,'beadparams') && ~isempty(params.beadparams) ,
+            % append bead params if exists
+            beadparamsZmatch_X = params.beadparams.allX{3};
+            beadparamsZmatch_Y = params.beadparams.allY{3};
+            beadparamsZmatchdispstage = params.beadparams.dispstage{3};
+        else
+            num = max(1,round(size(allX,1)/2));
+            beadparamsZmatch_X=ones(num,1)*[0 0 250];
+            beadparamsZmatch_Y=ones(num,1)*[0 0 0];
+            beadparamsZmatchdispstage = (ones(num,1)*[0 0 250]*1e3)';
+        end
+        %siz(end+1) = size(beadparamsZmatch_X,1);
+        allX = [allX;beadparamsZmatch_X];
+        allY = [allY;beadparamsZmatch_Y];
+        sdisp = [sdisp,beadparamsZmatchdispstage];
+        %allXFC = allX;
+        %allYFC = allY;
 
         if validthis(itile) ,
             suballX = allX+1;
@@ -177,11 +177,11 @@ parfor itile = 1:Ntiles ,
     %         for ii=1:2:length(idxsub)-1
     %             inds([idxsub(ii)+1:idxsub(ii+1)]) = 1;
     %         end
-    
+
 %             if itile == 15843 || itile == 15844 ,
 %                 keyboard
 %             end
-            
+
             glS_=sdisp/Dall;
             glSFC_=sdisp/DallFC;
             scopeparams(itile).affinegl = glS_;
@@ -191,4 +191,5 @@ parfor itile = 1:Ntiles ,
     parfor_progress() ;
 end
 parfor_progress(0) ;
+    
 end
