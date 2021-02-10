@@ -110,7 +110,7 @@ else
     matchfolder = descriptorfolder;
 end
 
-desc_ch = {'0'};
+desc_ch = {'1'};
 descriptorfile = fullfile(stitching_output_folder_path,sprintf('descriptors_ch%s.mat',desc_ch{:})); % accumulated descriptor file
 %matchedfeatfile = fullfile(matfolder,sprintf('feats_ch%s.mat',desc_ch{:})); % accumulated descriptor file
 
