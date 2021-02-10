@@ -4,6 +4,7 @@
 *.tif
 *.yml
 *.yml_old
+*.txt
 
 Thumbs.png
 videos/
