@@ -5,8 +5,8 @@ cd(this_folder_path) ;
 modpath ;
 
 % Specify the input/output folders
-sample_date = "2020-12-31"  %#ok<NOPTS>
-tile_folder_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling/', sample_date)  %#ok<NOPTS>
+sample_date = "2021-02-05"  %#ok<NOPTS>
+tile_folder_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/Tiling/%s', sample_date)  %#ok<NOPTS>
 pipeline_output_folder = sprintf('/nrs/mouselight/pipeline_output/%s', sample_date)  %#ok<NOPTS> 
 stitching_output_folder_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/cluster/Reconstructions/%s/stitching-output', sample_date)  %#ok<NOPTS>
 
