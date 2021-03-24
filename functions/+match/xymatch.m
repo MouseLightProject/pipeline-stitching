@@ -16,7 +16,7 @@ function [paireddescriptor,medianResidualperTile,curvemodel] = xymatch(descripto
 % $Author: base $	$Date: 2016/09/12 10:38:28 $	$Revision: 0.1 $
 % Copyright: HHMI 2016
 %%
-addpath(genpath('./thirdparty'))
+%addpath(genpath('./thirdparty'))
 Ntiles = size(neigs,1);
 if nargin<5
     model = @(p,y) p(3) - p(2).*((y-p(1)).^2); % FC model
