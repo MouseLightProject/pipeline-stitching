@@ -1,4 +1,4 @@
-function [Ic_m,It_m] = vizMatch(scopeloc,neigs,descriptors,ineig,imsize_um,iadj)
+function [Ic_m,It_m] = vizMatch(scopeloc,neigs,descriptors,ineig,imsize_um,iadj,X,Y,X_,Y_)
 % read tiles
 % iadj = 2; % 1 for x, 2 for y
 idxcent = neigs(ineig,1);
