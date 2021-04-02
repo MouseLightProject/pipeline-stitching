@@ -1,4 +1,4 @@
-function [ scopeparams_ ,paireddescriptor,curvemodel] = affineOutlierElimination( scopeloc,scopeparams,paireddescriptor,curvemodel )
+function [ scopeparams_ , curvemodel] = affineOutlierElimination( scopeloc,scopeparams,paireddescriptor,curvemodel )
 %AFFINEOUTLIERELIMINATION Summary of this function goes here
 %   Detailed explanation goes here
 

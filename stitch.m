@@ -38,32 +38,34 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         mkdir(stitching_output_folder_path) ;
     end
 
-    scopefile = fullfile(stitching_output_folder_path,'scopeloc.mat');
+    scopefile = fullfile(stitching_output_folder_path, 'scopeloc.mat') ;
     descriptorfolder = descoutput;
     matchfolder = matchoutput;
 
     desc_ch = {'1'};
-    descriptorfile = fullfile(stitching_output_folder_path,sprintf('descriptors_ch%s.mat',desc_ch{:})); % accumulated descriptor file
+    %descriptorfile = fullfile(stitching_output_folder_path,sprintf('descriptors_ch%s.mat',desc_ch{:})); % accumulated descriptor file
 
 
     %% 0: INTIALIZE
     % Read .acquisition file for each tile, and populate scopeloc with the
     % stage positions of each tile.
     if exist(scopefile, 'file') ,  
-        load(scopefile, 'scopeloc', 'neighbors', 'experimentfolder') ;
+        %load(scopefile, 'scopeloc', 'neighbors', 'experimentfolder') ;
+        load(scopefile, 'scopeloc') ;
     else
         is_sample_post_2016_04_04 = true ;  % set this to 1 for datasets acquired after 160404
         scopeloc = getScopeCoordinates(stitching_output_folder_path, tile_folder_path, is_sample_post_2016_04_04) ;  % parse from acqusition files
         neighbors = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
         experimentfolder = stitching_output_folder_path ;  % for backwards compatibility
-        save(scopefile,'scopeloc','neighbors','experimentfolder')
+        save(scopefile,'scopeloc','neighbors','experimentfolder') ;
     end
 
     %%
     % 1: LOAD MATCHED FEATS
     regpts_file_path = fullfile(stitching_output_folder_path,'regpts.mat') ;
     if exist(regpts_file_path, 'file') ,
-        load(regpts_file_path, 'regpts', 'featmap') ;
+        %load(regpts_file_path, 'regpts', 'featmap') ;
+        load(regpts_file_path, 'regpts') ;
     else
         %fprintf('Loading matched features stage...\n') ;
         %load(scopefile,'scopeloc');
@@ -77,7 +79,6 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
     %     unix(sprintf('cp %s %s',regpts_file_path,fullfile(stitching_output_folder_path,'regpts_1stiter.mat')))
     % end
 
-    %%
     % 2 scope params estimation.
     % i) finds matches on x&y
     % ii) finds field curvature based on matched points
@@ -85,16 +86,21 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
     % equations
 
     scope_params_per_tile_file_path = fullfile(stitching_output_folder_path,'scopeparams_pertile.mat') ;
-    if ~exist(descriptorfile, 'file') || ~exist(scope_params_per_tile_file_path, 'file') ,   
-        %%
+    %if exist(descriptorfile, 'file') && exist(scope_params_per_tile_file_path, 'file') ,   
+    if exist(scope_params_per_tile_file_path, 'file') ,   
+        %load(descriptorfile, 'descriptors') ;
+        %load(scope_params_per_tile_file_path, 'paireddescriptor', 'scopeparams', 'curvemodel', 'params') ;
+        load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params') ;
+    else
         fprintf('Running tileProcessor stage...\n') ;
         % paramater setting for descrtiptor match
         scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));
+        
+        params = struct() ;
         params.scopeacqparams = scopeacqparams;
         params.imsize_um = [scopeacqparams.x_size_um scopeacqparams.y_size_um scopeacqparams.z_size_um];
         params.overlap_um = [scopeacqparams.x_overlap_um scopeacqparams.y_overlap_um scopeacqparams.z_overlap_um];
         params.imagesize = [1024 1536 251];
-
         params.viz = 0;
         params.debug = 0;
         params.Ndivs = 4;
@@ -106,60 +112,54 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         params.beadparams = [];%PLACEHOLDER FOR BEADS, very unlikely to have it...
         params.singleTile = 1;
 
-        [descriptors,paireddescriptor,curvemodel,scopeparams] = ...
+        [curvemodel, scopeparams] = ...
             tileProcessor(scopeloc,descriptorfolder,desc_ch,params);
-        save(descriptorfile,'descriptors','-v7.3')
-        save(scope_params_per_tile_file_path,'paireddescriptor', ...
-            'scopeparams', 'curvemodel','params','-v7.3')
+        %save(descriptorfile, 'descriptors', '-v7.3') ;
+        save(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params', '-v7.3') ;
     end
 
-    %%
-    video_file_path = fullfile(stitching_output_folder_path, sprintf('%s-1stiter-ch1-%s.avi','video',date())) ;
-    if ~exist(video_file_path, 'file') ,
-        %%
-        fprintf('Running descriptorMatchQuality stage...\n') ;
-        load(scope_params_per_tile_file_path,'scopeparams')
-        descriptorMatchQuality(regpts,scopeparams{end},scopeloc,video_file_path)
-        % createThumb(regpts,scopeparams,scopeloc,video_file_path)
-        % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,video_file_path)
-        % descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,video_file_path)
-    end
+%     video_file_path = fullfile(stitching_output_folder_path, sprintf('%s-1stiter-ch1-%s.avi','video',date())) ;
+%     if ~exist(video_file_path, 'file') ,
+%         fprintf('Running descriptorMatchQuality stage...\n') ;
+%         %load(scope_params_per_tile_file_path,'scopeparams')
+%         descriptorMatchQuality(regpts,scopeparams,scopeloc,video_file_path)
+%         % createThumb(regpts,scopeparams,scopeloc,video_file_path)
+%         % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,video_file_path)
+%         % descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,video_file_path)
+%     end
 
-    %%
     vecfield3D_file_path = fullfile(stitching_output_folder_path,'vecfield3D.mat') ;
-    if ~exist(vecfield3D_file_path, 'file') ,
+    if exist(vecfield3D_file_path, 'file') ,
+        load(vecfield3D_file_path, 'vecfield3D', 'params') ;
+    else
         fprintf('Running vectorField3D stage...\n') ;
         %load(scopefile,'scopeloc')
         %load(regpts_file_path,'regpts')
-        load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params')
+        %load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params')
 
-        vecfield3D = vectorField3D(params,scopeloc,regpts,scopeparams{end},curvemodel{end},[]);
-        save(vecfield3D_file_path,'vecfield3D','params')
-        save(fullfile(stitching_output_folder_path,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params')
+        vecfield3D = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,[]);
+        save(vecfield3D_file_path, 'vecfield3D', 'params') ;
+        save(fullfile(stitching_output_folder_path,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params') ;
     end
 
     % Finally, output the yaml file(s)
-    %%
-    %load(scopefile,'scopeloc') ;
-    load(vecfield3D_file_path,'vecfield3D','params') ;
-    vecfield = vecfield3D ;
+    %load(vecfield3D_file_path,'vecfield3D','params') ;
+    %vecfield3D = vecfield3D ;
 
-    %%
     % checkthese = [1 4 5 7]; % 0 - right - bottom - below
     % [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
-    params.big = 1;
-    params.ymldims = [params.imagesize 2];%[1024 1536 251 2]
-    params.root = vecfield.root;
-
-    targetidx = 1:size(scopeloc.gridix,1);
-    params.outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date));
-    writeYML(params, targetidx(:)', vecfield);
-    unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache.yml'))) ;
+    big = 1;
+    ymldims = [params.imagesize 2];  % [1024 1536 251 2]
+    root = vecfield3D.root;
+    targetidx = 1:size(scopeloc.gridix,1) ;
+    outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date));
+    writeYML(outfile, targetidx, vecfield3D, big, ymldims, root) ;
+    system(sprintf('cp %s %s',outfile,fullfile(stitching_output_folder_path,'tilebase.cache.yml'))) ;
     
-    params.big=0 ;
-    params.outfile = sprintf('%s/%s.old.control.yml',stitching_output_folder_path,date);
-    writeYML(params, targetidx(:)', vecfield)
-    unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache_old.yml'))) ;
+    % params.big=0 ;
+    % params.outfile = sprintf('%s/%s.old.control.yml',stitching_output_folder_path,date);
+    % writeYML(params, targetidx(:)', vecfield3D)
+    % unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache_old.yml'))) ;
 
     fprintf('Done with stitching.\n') ;
 end

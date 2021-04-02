@@ -1,4 +1,4 @@
-function [paireddescriptor,medianResidualperTile,curvemodel] = xymatch(descriptors,neigs,scopeloc,params,model)
+function [paireddescriptor, curvemodel] = xymatch(descriptors,neigs,scopeloc,params,model)
 %ESTIMATESCOPEPARAMETERS Summary of this function goes here
 %
 % [OUTPUTARGS] = ESTIMATESCOPEPARAMETERS(INPUTARGS) Explain usage here
@@ -17,13 +17,13 @@ function [paireddescriptor,medianResidualperTile,curvemodel] = xymatch(descripto
 % Copyright: HHMI 2016
 %%
 %addpath(genpath('./thirdparty'))
-Ntiles = size(neigs,1);
+neigs_row_count = size(neigs,1);
 if nargin<5
     model = @(p,y) p(3) - p(2).*((y-p(1)).^2); % FC model
 end
 
 debug = 0;
-res = 0;
+%res = 0;
 viz=0;
 fignum = 101;
 
@@ -59,8 +59,8 @@ matchparams.opt.beta=2;
 % matchparams.opt.method = 'nonrigid';
 
 %%
-pixshiftpertile = nan(Ntiles,3,2);
-for ii=1:Ntiles
+pixshiftpertile = nan(neigs_row_count,3,2);
+for ii=1:neigs_row_count
     for iadj = 1:2
         if isfinite(neigs(ii,iadj+1))
             stgshift = 1000*(scopeloc.loc(neigs(ii,iadj+1),:)-scopeloc.loc(neigs(ii,1),:));
@@ -70,11 +70,11 @@ for ii=1:Ntiles
     end
 end
 if viz
-    these = isfinite(pixshiftpertile(:,1,1));onx = pixshiftpertile(these,1,1);medonx = median(onx);
+    these = isfinite(pixshiftpertile(:,1,1));onx = pixshiftpertile(these,1,1);medonx = median(onx);  %#ok<UNRCH>
     these = isfinite(pixshiftpertile(:,2,2));ony = pixshiftpertile(these,2,2);medony = median(ony);
     pixshiftpertile(isnan(pixshiftpertile(:,1,1)),:,1) = ones(sum(isnan(pixshiftpertile(:,1,1))),1)*[medonx,0,0];
     pixshiftpertile(isnan(pixshiftpertile(:,2,2)),:,2) = ones(sum(isnan(pixshiftpertile(:,2,2))),1)*[0,medony,0];
-    figure(123), cla,subplot(121),hist(onx,100),hold on,subplot(122),hist(ony,100)
+    figure(123), cla,subplot(121),hist(onx,100),hold on,subplot(122),hist(ony,100) %#ok<HIST>
 end
 % replace any nans (boundary tiles without an adjacent tile) with median values
 meds = squeeze(median(pixshiftpertile,1,'omitnan'))';
@@ -97,7 +97,7 @@ if isfield(params,'beadmodel')
 else
     matchparams.init_array=[]; % creates a array initialization based on stage displacements
     pvals_12 = [[733 1.02141e-05];[465 -1.4153e-05]];
-    for it = 1:Ntiles
+    for it = 1:neigs_row_count
         for iadj = 1:2
             matchparams.init_array(iadj,:,it)=[pvals_12(iadj,:) pixshiftpertile(it,iadj,iadj)];
         end
@@ -107,12 +107,12 @@ end
 %% INITIALIZATION
 % checkthese = [1 4 5 7]; % 0 - right - bottom - below
 % indicies are 1 based,e.g. x = 1:dims(1), not 0:dims(1)-1
-% xyz_umperpix = zeros(size(neigs,1),3);
-curvemodel = nan(3,3,size(neigs,1));
-medianResidualperTile = zeros(3,3,size(neigs,1));
-paireddescriptor = cell(size(neigs,1),1);
+% xyz_umperpix = zeros(tile_count,3);
+curvemodel = nan(3,3,neigs_row_count);
+medianResidualperTile = zeros(3,3,neigs_row_count);
+paireddescriptor = cell(neigs_row_count,1);
 % initialize
-for ix = 1:size(neigs,1)
+for ix = 1:neigs_row_count
     paireddescriptor{ix}.onx.valid = 0;
     paireddescriptor{ix}.onx.X = [];
     paireddescriptor{ix}.onx.Y = [];
@@ -131,21 +131,26 @@ paireddesctemp{2}.valid = 0;
 paireddesctemp{2}.X = [];
 paireddesctemp{2}.Y = [];
 
-interiorTile_list = util.interior_tiles(scopeloc,1);
+%interiorTile_list = util.interior_tiles(scopeloc,1);
 
 %%
 try parfor_progress(0);catch;end
-parfor_progress(Ntiles) ;
+parfor_progress(neigs_row_count) ;
 
-parfor ineig = 1:Ntiles%5163%[5162 5163 5164]%Ntiles%find(neigs(:,1)==5463)%1:size(neigs,1)%5162
+parfor neigs_row_index = 1:neigs_row_count ,
+%tile_index_of_interest = find(strcmp('/2020-12-01/01/01916', scopeloc.relativepaths))
+%for tile_index = tile_index_of_interest ,
     %% load descriptor pairs X (center) - Y (adjacent tile)
-    idxcent = neigs(ineig,1);
+    idxcent = neigs(neigs_row_index,1);
     descent = descriptors{idxcent};
     if isempty(descent);continue;end
     descent = double(descent(:,1:3));
     if size(descent,1)<3;continue;end
     
     descent = util.correctTiles(descent,dims); % flip dimensions
+       % ALT: I think this is because the fiducials are computed on the raw tile
+       % stacks, which have to be flipped in x and y to get them into the proper
+       % orientation for the rendered stack
     mout = nan(3,3);
     paireddescriptor_ = paireddesctemp;
     R_ = zeros(3); % median residual
@@ -154,7 +159,7 @@ parfor ineig = 1:Ntiles%5163%[5162 5163 5164]%Ntiles%find(neigs(:,1)==5463)%1:si
     for iadj = 1:size(neigs,2)-2 %1:x-overlap, 2:y-overlap, 3:z-overlap
         %%
         % idaj : 1=right(+x), 2=bottom(+y), 3=below(+z)
-        idxadj =  neigs(ineig,iadj+1);
+        idxadj =  neigs(neigs_row_index,iadj+1);
         
         if isnan(idxadj);continue;end
         descadj = descriptors{idxadj};
@@ -175,21 +180,21 @@ parfor ineig = 1:Ntiles%5163%[5162 5163 5164]%Ntiles%find(neigs(:,1)==5463)%1:si
         X = descent(descent(:,iadj)>nbound(1)&descent(:,iadj)<nbound(2),:);
         Y = descadj(descadj(:,iadj)>nbound(1)&descadj(:,iadj)<nbound(2),:);
         %%
-        if size(X,1)<3 | size(Y,1)<3;continue;end
+        if size(X,1)<3 || size(Y,1)<3;continue;end
         % get descpair
         [X_,Y_] = match.descriptorMatch4XY(X,Y,matchparams);
-        if size(X_,1)<3 | size(Y_,1)<3;continue;end
+        if size(X_,1)<3 || size(Y_,1)<3;continue;end
         Y_(:,iadj) = Y_(:,iadj)- pixshift(iadj);% move it back to original location after CDP
         %[X_e,Y_e,out_e,valid_e] = match.fcestimate(X_,Y_,iadj,matchparams,pinit_model);
         % [X_e2,Y_e2,out_e2,valid_e2] = match.fcestimate(X_e,Y_e,iadj,matchparams);
         %%
-        if viz & 0;
-            util.debug.vizMatch(scopeloc,neigs,descriptors,ineig,imsize_um,iadj);
+        if viz ,
+            util.debug.vizMatchALT(scopeloc,neigs,descriptors,neigs_row_index,pixshift,iadj,X,Y,X_,Y_);  %#ok<UNRCH>
         end
         %%
         % get field curvature model
         if isfield(matchparams,'init_array') % overwrites any initialization with per tile values
-            pinit_model = matchparams.init_array(:,:,ineig);
+            pinit_model = matchparams.init_array(:,:,neigs_row_index);
         elseif isfield(matchparams,'init')
             pinit_model = matchparams.init;
         else
@@ -213,17 +218,17 @@ parfor ineig = 1:Ntiles%5163%[5162 5163 5164]%Ntiles%find(neigs(:,1)==5463)%1:si
         %R(:,iadj,ineig) = round(median(X_-Y_));
         R_(:,iadj) = round(median(X_-Y_));
     end
-    medianResidualperTile(:,:,ineig) = R_;
-    curvemodel(:,:,ineig) = mout;
+    medianResidualperTile(:,:,neigs_row_index) = R_;
+    curvemodel(:,:,neigs_row_index) = mout;
     
-    paireddescriptor{ineig}.onx.valid = paireddescriptor_{1}.valid;
-    paireddescriptor{ineig}.onx.X = paireddescriptor_{1}.X;
-    paireddescriptor{ineig}.onx.Y = paireddescriptor_{1}.Y;
+    paireddescriptor{neigs_row_index}.onx.valid = paireddescriptor_{1}.valid;
+    paireddescriptor{neigs_row_index}.onx.X = paireddescriptor_{1}.X;
+    paireddescriptor{neigs_row_index}.onx.Y = paireddescriptor_{1}.Y;
     
-    paireddescriptor{ineig}.ony.valid = paireddescriptor_{2}.valid;
-    paireddescriptor{ineig}.ony.X = paireddescriptor_{2}.X;
-    paireddescriptor{ineig}.ony.Y = paireddescriptor_{2}.Y;
-    paireddescriptor{ineig}.count = [size(paireddescriptor_{1}.X,1) size(paireddescriptor_{2}.X,1)];
+    paireddescriptor{neigs_row_index}.ony.valid = paireddescriptor_{2}.valid;
+    paireddescriptor{neigs_row_index}.ony.X = paireddescriptor_{2}.X;
+    paireddescriptor{neigs_row_index}.ony.Y = paireddescriptor_{2}.Y;
+    paireddescriptor{neigs_row_index}.count = [size(paireddescriptor_{1}.X,1) size(paireddescriptor_{2}.X,1)];
     parfor_progress;
 end
 parfor_progress(0);
