@@ -48,10 +48,12 @@ end
 
 %%
 latticeZRange = unique(scopeloc.gridix(:,3));
+maximum_lattice_k = max(scopeloc.gridix(:,3)) ;
 clear xyz_t xyz_tp1 XYZ_t XYZ_tp1 ranXY ranXYZ
 for t = latticeZRange(1:end-1)'
     %%
-    disp(['    Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3)))]);
+    fprintf('    Layer %d of %d\n', t, maximum_lattice_k) ;
+    %fprintf(['    Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) '\n']);
     ix = (scopeloc.gridix(:,3)'==t);
     %%
     cnt = 0;
@@ -106,13 +108,16 @@ Rmax = max(cat(1,trmax{:}))+scopeparams(1).imsize_um*1e3.*[1 1 0];
 Rmin = min(cat(1,trmin{:}))-scopeparams(1).imsize_um*1e3.*[1 1 0];
 % plot desctiptors
 myfig = 100;
-figure(myfig), cla, clf
+figure(myfig) ;
+cla() ;
+clf() ;
 hold on
 loops = latticeZRange(end)-latticeZRange(1);
 F(loops) = struct('cdata',[],'colormap',[]);
 iter=1;
 %%
-for t = 1478%latticeZRange(1:end-1)'%[779,780]%
+%for t = 1478%latticeZRange(1:end-1)'%[779,780]%
+for t = latticeZRange(1:end-1)' ,
     %%
     ix = (scopeloc.gridix(:,3)'==t);
     x = scopeloc.loc(ix,1)*1e6-scopeparams(1).imsize_um(1)*1e3;
@@ -122,7 +127,7 @@ for t = 1478%latticeZRange(1:end-1)'%[779,780]%
     clear theseinds
     theseinds = 1:sum(ix);
     if t>size(XYZ_t,2)
-        F(iter) = getframe;
+        F(iter) = getframe() ;
         iter=iter+1;
         continue
     end
@@ -236,7 +241,6 @@ for t = 1478%latticeZRange(1:end-1)'%[779,780]%
         %             end
         %         end
     end
-    1
     if ~emptyslice
         scatter(XYZ_t{t}(:,1),XYZ_t{t}(:,2),6,'filled', ...
             'MarkerFaceAlpha',.2,'MarkerFaceColor',[1 1 1]*.5)
@@ -262,6 +266,9 @@ open(v)
 writeVideo(v,F)
 close(v)
 %%
+[video_parent_path, video_base_name] = fileparts(videofile) ;
+slide_show_folder_path = fullfile(video_parent_path, video_base_name) ;
+write_slide_show(slide_show_folder_path, F) ;
 end
 
 function h=subaxis(varargin)

@@ -93,7 +93,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params') ;
     else
         fprintf('Running tileProcessor stage...\n') ;
-        % paramater setting for descrtiptor match
+        % paramater setting for descriptor match
         scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));
         
         params = struct() ;
@@ -109,7 +109,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         params.expensionratio = 1;
         params.order = 1;
         params.applyFC = 1;
-        params.beadparams = [];%PLACEHOLDER FOR BEADS, very unlikely to have it...
+        %params.beadparams = [];%PLACEHOLDER FOR BEADS, very unlikely to have it...
         params.singleTile = 1;
 
         [curvemodel, scopeparams] = ...
@@ -118,16 +118,35 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         save(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params', '-v7.3') ;
     end
 
-%     video_file_path = fullfile(stitching_output_folder_path, sprintf('%s-1stiter-ch1-%s.avi','video',date())) ;
-%     if ~exist(video_file_path, 'file') ,
-%         fprintf('Running descriptorMatchQuality stage...\n') ;
-%         %load(scope_params_per_tile_file_path,'scopeparams')
-%         descriptorMatchQuality(regpts,scopeparams,scopeloc,video_file_path)
-%         % createThumb(regpts,scopeparams,scopeloc,video_file_path)
-%         % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,video_file_path)
-%         % descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,video_file_path)
+    % Make a video
+    descriptor_match_quality_video_file_path = fullfile(stitching_output_folder_path, 'descriptor-match-quality.avi') ;
+    if ~exist(descriptor_match_quality_video_file_path, 'file') ,
+        fprintf('Making descriptorMatchQuality video...\n') ;
+        %load(scope_params_per_tile_file_path,'scopeparams')
+        descriptorMatchQuality(regpts,scopeparams,scopeloc,descriptor_match_quality_video_file_path)
+        % createThumb(regpts,scopeparams,scopeloc,video_file_path)
+        % descriptorMatchQualityHeatMap(regpts,scopeparams{end},scopeloc,video_file_path)
+        % descriptorMatchQualityHeatMap_forPaper(regpts,scopeparams{end},scopeloc,video_file_path)
+        fprintf('Done making descriptorMatchQuality video.\n') ;
+    end
+
+%     % Make thumbnails showing tile overlap, posibly ofther info
+%     create_thumb_video_file_path = fullfile(stitching_output_folder_path, 'thumb.avi') ;
+%     if ~exist(create_thumb_video_file_path, 'file') ,
+%         fprintf('Making createThumb video...\n') ;
+%         createThumb(regpts,scopeparams,scopeloc,create_thumb_video_file_path)
+%         fprintf('Done making createThumb video.\n') ;
 %     end
 
+    % Make a heatmap of some sort
+    descriptor_match_quality_heatmap_video_file_path = fullfile(stitching_output_folder_path, 'descriptor-match-quality-heatmap.avi') ;
+    if ~exist(descriptor_match_quality_heatmap_video_file_path, 'file') ,
+        fprintf('Making descriptorMatchQualityHeatMap video...\n') ;
+        descriptorMatchQualityHeatMap(regpts,scopeparams,scopeloc,descriptor_match_quality_heatmap_video_file_path) ;
+        fprintf('Done making descriptorMatchQualityHeatMap video.\n') ;
+    end
+
+    % Compute the 3D vector field
     vecfield3D_file_path = fullfile(stitching_output_folder_path,'vecfield3D.mat') ;
     if exist(vecfield3D_file_path, 'file') ,
         load(vecfield3D_file_path, 'vecfield3D', 'params') ;

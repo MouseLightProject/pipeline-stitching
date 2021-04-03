@@ -1,4 +1,4 @@
-function [paireddescriptor, curvemodel] = xymatch(descriptors,neigs,scopeloc,params,model)
+function [paireddescriptor, curvemodel] = xymatch(descriptors, neigs, scopeloc, params, model)
 %ESTIMATESCOPEPARAMETERS Summary of this function goes here
 %
 % [OUTPUTARGS] = ESTIMATESCOPEPARAMETERS(INPUTARGS) Explain usage here
@@ -109,10 +109,10 @@ end
 % indicies are 1 based,e.g. x = 1:dims(1), not 0:dims(1)-1
 % xyz_umperpix = zeros(tile_count,3);
 curvemodel = nan(3,3,neigs_row_count);
-medianResidualperTile = zeros(3,3,neigs_row_count);
+%medianResidualperTile = zeros(3,3,neigs_row_count);
 paireddescriptor = cell(neigs_row_count,1);
 % initialize
-for ix = 1:neigs_row_count
+for ix = 1:neigs_row_count ,
     paireddescriptor{ix}.onx.valid = 0;
     paireddescriptor{ix}.onx.X = [];
     paireddescriptor{ix}.onx.Y = [];
@@ -123,13 +123,15 @@ for ix = 1:neigs_row_count
     paireddescriptor{ix}.count = [0 0];
 end
 
-paireddesctemp=[];
-paireddesctemp{1}.valid = 0;
-paireddesctemp{1}.X = [];
-paireddesctemp{1}.Y = [];
-paireddesctemp{2}.valid = 0;
-paireddesctemp{2}.X = [];
-paireddesctemp{2}.Y = [];
+% Make a template we'll use to initialize paired_descriptor_for_this_tile
+% for each tile
+paired_descriptor_for_this_tile_template=[];
+paired_descriptor_for_this_tile_template{1}.valid = 0;
+paired_descriptor_for_this_tile_template{1}.X = [];
+paired_descriptor_for_this_tile_template{1}.Y = [];
+paired_descriptor_for_this_tile_template{2}.valid = 0;
+paired_descriptor_for_this_tile_template{2}.X = [];
+paired_descriptor_for_this_tile_template{2}.Y = [];
 
 %interiorTile_list = util.interior_tiles(scopeloc,1);
 
@@ -152,11 +154,11 @@ parfor neigs_row_index = 1:neigs_row_count ,
        % stacks, which have to be flipped in x and y to get them into the proper
        % orientation for the rendered stack
     mout = nan(3,3);
-    paireddescriptor_ = paireddesctemp;
+    paired_descriptor_for_this_tile = paired_descriptor_for_this_tile_template;
     R_ = zeros(3); % median residual
     
     %%
-    for iadj = 1:size(neigs,2)-2 %1:x-overlap, 2:y-overlap, 3:z-overlap
+    for iadj = 1:2 , %1:x-overlap, 2:y-overlap, 3:z-overlap
         %%
         % idaj : 1=right(+x), 2=bottom(+y), 3=below(+z)
         idxadj =  neigs(neigs_row_index,iadj+1);
@@ -203,7 +205,7 @@ parfor neigs_row_index = 1:neigs_row_count ,
 %         pinit_model
 %         [X_e,Y_e,out_e,valid_e] = match.fcestimate(X_,Y_,iadj,matchparams,pinit_model);
         
-        [X_,Y_,out,valid] = match.fcestimate(X_,Y_,iadj,matchparams,pinit_model);
+        [X_, Y_, model_for_this_pair, valid] = match.fcestimate(X_, Y_, iadj, matchparams, pinit_model) ;
         
         %%
         % flip back dimensions
@@ -211,24 +213,24 @@ parfor neigs_row_index = 1:neigs_row_count ,
         Y_ = util.correctTiles(Y_,dims);
         
         % store pairs
-        mout(iadj,:) = out;
-        paireddescriptor_{iadj}.valid = valid;
-        paireddescriptor_{iadj}.X = X_;
-        paireddescriptor_{iadj}.Y = Y_;
+        mout(iadj,:) = model_for_this_pair;
+        paired_descriptor_for_this_tile{iadj}.valid = valid;
+        paired_descriptor_for_this_tile{iadj}.X = X_;
+        paired_descriptor_for_this_tile{iadj}.Y = Y_;
         %R(:,iadj,ineig) = round(median(X_-Y_));
         R_(:,iadj) = round(median(X_-Y_));
     end
-    medianResidualperTile(:,:,neigs_row_index) = R_;
+    %medianResidualperTile(:,:,neigs_row_index) = R_;
     curvemodel(:,:,neigs_row_index) = mout;
     
-    paireddescriptor{neigs_row_index}.onx.valid = paireddescriptor_{1}.valid;
-    paireddescriptor{neigs_row_index}.onx.X = paireddescriptor_{1}.X;
-    paireddescriptor{neigs_row_index}.onx.Y = paireddescriptor_{1}.Y;
+    paireddescriptor{neigs_row_index}.onx.valid = paired_descriptor_for_this_tile{1}.valid;
+    paireddescriptor{neigs_row_index}.onx.X = paired_descriptor_for_this_tile{1}.X;
+    paireddescriptor{neigs_row_index}.onx.Y = paired_descriptor_for_this_tile{1}.Y;
     
-    paireddescriptor{neigs_row_index}.ony.valid = paireddescriptor_{2}.valid;
-    paireddescriptor{neigs_row_index}.ony.X = paireddescriptor_{2}.X;
-    paireddescriptor{neigs_row_index}.ony.Y = paireddescriptor_{2}.Y;
-    paireddescriptor{neigs_row_index}.count = [size(paireddescriptor_{1}.X,1) size(paireddescriptor_{2}.X,1)];
+    paireddescriptor{neigs_row_index}.ony.valid = paired_descriptor_for_this_tile{2}.valid;
+    paireddescriptor{neigs_row_index}.ony.X = paired_descriptor_for_this_tile{2}.X;
+    paireddescriptor{neigs_row_index}.ony.Y = paired_descriptor_for_this_tile{2}.Y;
+    paireddescriptor{neigs_row_index}.count = [size(paired_descriptor_for_this_tile{1}.X,1) size(paired_descriptor_for_this_tile{2}.X,1)];
     parfor_progress;
 end
 parfor_progress(0);

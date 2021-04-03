@@ -1,4 +1,4 @@
-function [vecfield] = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,theselayers)
+function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,theselayers)
 %VECTORFIELD3D Summary of this function goes here
 %
 % [OUTPUTARGS] = VECTORFIELD3D(INPUTARGS) Explain usage here
@@ -28,7 +28,7 @@ dims = params.imagesize;
 order = params.order;
 zlimdefaults = [2 20 dims(3)-21 dims(3)-3];
 params.zlimdefaults = zlimdefaults;
-beadparams = params.beadparams;
+%beadparams = params.beadparams;
 params.applyFC=1;
 %%
 [tileneighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format

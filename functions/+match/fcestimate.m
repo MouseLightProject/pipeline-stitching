@@ -1,4 +1,4 @@
-function [X_,Y_,out,valid] =  fcestimate(X_,Y_,iadj,params,pinit_model)
+function [X_, Y_, out, valid] =  fcestimate(X_, Y_, iadj, params, pinit_model)
 %FCESTIMATE Summary of this function goes here
 %   Detailed explanation goes here
 viz = params.viz;

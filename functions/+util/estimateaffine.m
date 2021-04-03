@@ -142,17 +142,17 @@ parfor itile = 1:Ntiles ,
             end
         end
 
-        if isfield(params,'beadparams') && ~isempty(params.beadparams) ,
-            % append bead params if exists
-            beadparamsZmatch_X = params.beadparams.allX{3};
-            beadparamsZmatch_Y = params.beadparams.allY{3};
-            beadparamsZmatchdispstage = params.beadparams.dispstage{3};
-        else
-            num = max(1,round(size(allX,1)/2));
-            beadparamsZmatch_X=ones(num,1)*[0 0 250];
-            beadparamsZmatch_Y=ones(num,1)*[0 0 0];
-            beadparamsZmatchdispstage = (ones(num,1)*[0 0 250]*1e3)';
-        end
+%         if isfield(params,'beadparams') && ~isempty(params.beadparams) ,
+%             % append bead params if exists
+%             beadparamsZmatch_X = params.beadparams.allX{3};
+%             beadparamsZmatch_Y = params.beadparams.allY{3};
+%             beadparamsZmatchdispstage = params.beadparams.dispstage{3};
+%         else
+        num = max(1,round(size(allX,1)/2));
+        beadparamsZmatch_X=ones(num,1)*[0 0 250];
+        beadparamsZmatch_Y=ones(num,1)*[0 0 0];
+        beadparamsZmatchdispstage = (ones(num,1)*[0 0 250]*1e3)';
+%         end
         %siz(end+1) = size(beadparamsZmatch_X,1);
         allX = [allX;beadparamsZmatch_X];
         allY = [allY;beadparamsZmatch_Y];
