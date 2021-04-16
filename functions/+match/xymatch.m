@@ -24,7 +24,7 @@ end
 
 debug = 0;
 %res = 0;
-viz=0;
+do_show_visualizations = true ;
 fignum = 101;
 
 projectionThr = 20; % distance between target and projected point has to be less than this number
@@ -53,7 +53,7 @@ matchparams.optimopts = optimopts;
 matchparams.opt = opt;
 matchparams.projectionThr = projectionThr;
 matchparams.debug = debug;
-matchparams.viz = viz;
+matchparams.viz = do_show_visualizations;
 matchparams.fignum = fignum;
 matchparams.opt.beta=2;
 % matchparams.opt.method = 'nonrigid';
@@ -63,19 +63,19 @@ pixshiftpertile = nan(neigs_row_count,3,2);
 for ii=1:neigs_row_count
     for iadj = 1:2
         if isfinite(neigs(ii,iadj+1))
-            stgshift = 1000*(scopeloc.loc(neigs(ii,iadj+1),:)-scopeloc.loc(neigs(ii,1),:));
-            pixshift = round(stgshift.*(dims-1)./(imsize_um));
-            pixshiftpertile(ii,:,iadj) = pixshift;
+            um_shift = 1000*(scopeloc.loc(neigs(ii,iadj+1),:)-scopeloc.loc(neigs(ii,1),:));
+            pixel_shift = round(um_shift.*(dims-1)./(imsize_um));
+            pixshiftpertile(ii,:,iadj) = pixel_shift;
         end
     end
 end
-if viz
-    these = isfinite(pixshiftpertile(:,1,1));onx = pixshiftpertile(these,1,1);medonx = median(onx);  %#ok<UNRCH>
-    these = isfinite(pixshiftpertile(:,2,2));ony = pixshiftpertile(these,2,2);medony = median(ony);
-    pixshiftpertile(isnan(pixshiftpertile(:,1,1)),:,1) = ones(sum(isnan(pixshiftpertile(:,1,1))),1)*[medonx,0,0];
-    pixshiftpertile(isnan(pixshiftpertile(:,2,2)),:,2) = ones(sum(isnan(pixshiftpertile(:,2,2))),1)*[0,medony,0];
-    figure(123), cla,subplot(121),hist(onx,100),hold on,subplot(122),hist(ony,100) %#ok<HIST>
-end
+% if do_show_visualizations ,
+%     these = isfinite(pixshiftpertile(:,1,1));onx = pixshiftpertile(these,1,1);medonx = median(onx);  %#ok<UNRCH>
+%     these = isfinite(pixshiftpertile(:,2,2));ony = pixshiftpertile(these,2,2);medony = median(ony);
+%     pixshiftpertile(isnan(pixshiftpertile(:,1,1)),:,1) = ones(sum(isnan(pixshiftpertile(:,1,1))),1)*[medonx,0,0];
+%     pixshiftpertile(isnan(pixshiftpertile(:,2,2)),:,2) = ones(sum(isnan(pixshiftpertile(:,2,2))),1)*[0,medony,0];
+%     figure(123), cla,subplot(121),hist(onx,100),hold on,subplot(122),hist(ony,100) %#ok<HIST>
+% end
 % replace any nans (boundary tiles without an adjacent tile) with median values
 meds = squeeze(median(pixshiftpertile,1,'omitnan'))';
 for iadj = 1:2
@@ -139,59 +139,76 @@ paired_descriptor_for_this_tile_template{2}.Y = [];
 try parfor_progress(0);catch;end
 parfor_progress(neigs_row_count) ;
 
-parfor neigs_row_index = 1:neigs_row_count ,
+%for neigs_row_index = 1:neigs_row_count ,
+for neigs_row_index = round(neigs_row_count/2):neigs_row_count ,
 %tile_index_of_interest = find(strcmp('/2020-12-01/01/01916', scopeloc.relativepaths))
 %for tile_index = tile_index_of_interest ,
     %% load descriptor pairs X (center) - Y (adjacent tile)
-    idxcent = neigs(neigs_row_index,1);
-    descent = descriptors{idxcent};
-    if isempty(descent);continue;end
-    descent = double(descent(:,1:3));
-    if size(descent,1)<3;continue;end
+    central_tile_index = neigs(neigs_row_index,1);
+    central_tile_flipped_fiducials_and_descriptors = descriptors{central_tile_index};  %#ok<PFBNS>
+    if isempty(central_tile_flipped_fiducials_and_descriptors);continue;end
+    central_tile_flipped_fiducials = double(central_tile_flipped_fiducials_and_descriptors(:,1:3));
+    if size(central_tile_flipped_fiducials,1)<3;continue;end
     
-    descent = util.correctTiles(descent,dims); % flip dimensions
+    central_tile_fiducials = util.correctTiles(central_tile_flipped_fiducials, dims) ;  % flip dimensions
        % ALT: I think this is because the fiducials are computed on the raw tile
        % stacks, which have to be flipped in x and y to get them into the proper
        % orientation for the rendered stack
-    mout = nan(3,3);
+    mout = nan(3,3) ;
     paired_descriptor_for_this_tile = paired_descriptor_for_this_tile_template;
-    R_ = zeros(3); % median residual
+    %R_ = zeros(3); % median residual
     
     %%
     for iadj = 1:2 , %1:x-overlap, 2:y-overlap, 3:z-overlap
         %%
         % idaj : 1=right(+x), 2=bottom(+y), 3=below(+z)
-        idxadj =  neigs(neigs_row_index,iadj+1);
+        other_tile_index = neigs(neigs_row_index,iadj+1);  %#ok<PFBNS>
         
-        if isnan(idxadj);continue;end
-        descadj = descriptors{idxadj};
-        if isempty(descadj);continue;end
+        if isnan(other_tile_index);continue;end
+        other_tile_raw_fiducials_and_descriptors = descriptors{other_tile_index};
+        if isempty(other_tile_raw_fiducials_and_descriptors);continue;end
         
-        descadj = double(descadj(:,1:3)); % descadj has x-y-z-w1-w2 format
-        if size(descadj,1)<3;continue;end
+        other_tile_raw_fiducials = double(other_tile_raw_fiducials_and_descriptors(:,1:3)); % descadj has x-y-z-w1-w2 format
+        if size(other_tile_raw_fiducials,1)<3;continue;end
         
-        descadj = util.correctTiles(descadj,dims); % flip dimensions
-        stgshift = 1000*(scopeloc.loc(idxadj,:)-scopeloc.loc(idxcent,:));
-        pixshift = round(stgshift.*(dims-1)./(imsize_um));
-        descadj = descadj + ones(size(descadj,1),1)*pixshift; % shift with initial guess based on stage coordinate
+        other_tile_fiducials = util.correctTiles(other_tile_raw_fiducials,dims);  % flip dimensions
+        um_shift = 1000*(scopeloc.loc(other_tile_index,:)-scopeloc.loc(central_tile_index,:)) ;  %#ok<PFBNS>  % um
+        pixel_shift = round(um_shift.*(dims-1)./(imsize_um));
+        %other_tile_fiducials = other_tile_fiducials + ones(size(other_tile_fiducials,1),1)*pixel_shift ;  % shift with initial guess based on stage coordinate
+        other_tile_shifted_fiducials = other_tile_fiducials + pixel_shift ;  % shift with initial guess based on stage coordinate
         
         %%
         nbound = [0 0];
-        nbound(1) = max(pixshift(iadj),min(descadj(:,iadj))) - 15;
-        nbound(2) = min(dims(iadj),max(descent(:,iadj)))+0 + 15;
-        X = descent(descent(:,iadj)>nbound(1)&descent(:,iadj)<nbound(2),:);
-        Y = descadj(descadj(:,iadj)>nbound(1)&descadj(:,iadj)<nbound(2),:);
+        nbound(1) = max(pixel_shift(iadj),min(other_tile_shifted_fiducials(:,iadj))) - 15;
+        nbound(2) = min(dims(iadj),max(central_tile_fiducials(:,iadj)))+0 + 15;
+        central_tile_fiducials_near_overlap = central_tile_fiducials(central_tile_fiducials(:,iadj)>nbound(1)&central_tile_fiducials(:,iadj)<nbound(2),:);
+        other_tile_shifted_fiducials_near_overlap = other_tile_shifted_fiducials(other_tile_shifted_fiducials(:,iadj)>nbound(1)&other_tile_shifted_fiducials(:,iadj)<nbound(2),:);
         %%
-        if size(X,1)<3 || size(Y,1)<3;continue;end
+        if size(central_tile_fiducials_near_overlap,1)<3 || size(other_tile_shifted_fiducials_near_overlap,1)<3 ,
+            continue
+        end
         % get descpair
-        [X_,Y_] = match.descriptorMatch4XY(X,Y,matchparams);
-        if size(X_,1)<3 || size(Y_,1)<3;continue;end
-        Y_(:,iadj) = Y_(:,iadj)- pixshift(iadj);% move it back to original location after CDP
-        %[X_e,Y_e,out_e,valid_e] = match.fcestimate(X_,Y_,iadj,matchparams,pinit_model);
+        [matched_central_tile_fiducials, matched_other_tile_shifted_fiducials] = ...
+            match.descriptorMatch4XY(central_tile_fiducials_near_overlap, other_tile_shifted_fiducials_near_overlap, matchparams) ;
+        if size(matched_central_tile_fiducials,1)<3 || size(matched_other_tile_shifted_fiducials,1)<3 ,
+            continue
+        end
+        matched_other_tile_fiducials = matched_other_tile_shifted_fiducials ;
+        matched_other_tile_fiducials(:,iadj) = matched_other_tile_shifted_fiducials(:,iadj) - pixel_shift(iadj);  % move it back to original location after CDP
+        %[X_e,Y_e,out_e,valid_e] = match.fcestimate(matched_central_tile_fiducials,matched_other_tile_fiducials,iadj,matchparams,pinit_model);
         % [X_e2,Y_e2,out_e2,valid_e2] = match.fcestimate(X_e,Y_e,iadj,matchparams);
         %%
-        if viz ,
-            util.debug.vizMatchALT(scopeloc,neigs,descriptors,neigs_row_index,pixshift,iadj,X,Y,X_,Y_);  %#ok<UNRCH>
+        if do_show_visualizations ,
+            util.debug.vizMatchALT(scopeloc, ...
+                                   neigs, ...
+                                   descriptors, ...
+                                   neigs_row_index, ...
+                                   pixel_shift, ...
+                                   iadj, ...
+                                   central_tile_fiducials_near_overlap, ...
+                                   other_tile_shifted_fiducials_near_overlap, ...
+                                   matched_central_tile_fiducials, ...
+                                   matched_other_tile_fiducials);  %#ok<UNRCH>
         end
         %%
         % get field curvature model
@@ -203,25 +220,26 @@ parfor neigs_row_index = 1:neigs_row_count ,
             error('Unable to initialize pinit_model') ;
         end
 %         pinit_model
-%         [X_e,Y_e,out_e,valid_e] = match.fcestimate(X_,Y_,iadj,matchparams,pinit_model);
+%         [X_e,Y_e,out_e,valid_e] = match.fcestimate(matched_central_tile_fiducials,matched_other_tile_fiducials,iadj,matchparams,pinit_model);
         
-        [X_, Y_, model_for_this_pair, valid] = match.fcestimate(X_, Y_, iadj, matchparams, pinit_model) ;
+        [fced_matched_central_tile_fiducials, fced_matched_other_tile_fiducials, model_for_this_pair, is_valid] = ...
+            match.fcestimate(matched_central_tile_fiducials, matched_other_tile_fiducials, iadj, matchparams, pinit_model) ;
         
         %%
         % flip back dimensions
-        X_ = util.correctTiles(X_,dims);
-        Y_ = util.correctTiles(Y_,dims);
+        flipped_fced_matched_central_tile_fiducials = util.correctTiles(fced_matched_central_tile_fiducials, dims) ;
+        flipped_fced_matched_other_tile_fiducials   = util.correctTiles(fced_matched_other_tile_fiducials  , dims) ;
         
         % store pairs
         mout(iadj,:) = model_for_this_pair;
-        paired_descriptor_for_this_tile{iadj}.valid = valid;
-        paired_descriptor_for_this_tile{iadj}.X = X_;
-        paired_descriptor_for_this_tile{iadj}.Y = Y_;
+        paired_descriptor_for_this_tile{iadj}.valid = is_valid;
+        paired_descriptor_for_this_tile{iadj}.X = flipped_fced_matched_central_tile_fiducials;
+        paired_descriptor_for_this_tile{iadj}.Y = flipped_fced_matched_other_tile_fiducials;
         %R(:,iadj,ineig) = round(median(X_-Y_));
-        R_(:,iadj) = round(median(X_-Y_));
+        %R_(:,iadj) = round(median(flipped_fced_matched_central_tile_fiducials-flipped_fced_matched_other_tile_fiducials));
     end
     %medianResidualperTile(:,:,neigs_row_index) = R_;
-    curvemodel(:,:,neigs_row_index) = mout;
+    curvemodel(:,:,neigs_row_index) = mout ;
     
     paireddescriptor{neigs_row_index}.onx.valid = paired_descriptor_for_this_tile{1}.valid;
     paireddescriptor{neigs_row_index}.onx.X = paired_descriptor_for_this_tile{1}.X;
