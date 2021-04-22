@@ -158,7 +158,13 @@ function descriptorMatchQualityHeatMap(regpts, scopeparams, scopeloc, video_file
                 scatteredInterpolant(other_fiducial_xyz_from_pair_index, xyz_discrepancy_from_pair_index_within_layer, 'linear', 'nearest') ;
             tile_xyz_from_index_of_tile_within_layer = scopeloc.loc(is_in_this_layer_from_tile_index,:)*1e6 ;  % nm
             interpolated_xy_discrepancy_from_index_of_tile_within_layer = xy_discrepancy_from_xyz(tile_xyz_from_index_of_tile_within_layer) ;
+            if isempty(interpolated_xy_discrepancy_from_index_of_tile_within_layer) ,
+                interpolated_xy_discrepancy_from_index_of_tile_within_layer = nan(tile_count_in_this_layer,1) ;
+            end
             interpolated_xyz_discrepancy_from_index_of_tile_within_layer = xyz_discrepancy_from_xyz(tile_xyz_from_index_of_tile_within_layer) ;
+            if isempty(interpolated_xyz_discrepancy_from_index_of_tile_within_layer) ,
+                interpolated_xyz_discrepancy_from_index_of_tile_within_layer = nan(tile_count_in_this_layer,1) ;
+            end
         end
         % initalize canvas
         figure(myfig), cla, clf
