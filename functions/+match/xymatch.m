@@ -24,7 +24,7 @@ end
 
 debug = 0;
 %res = 0;
-do_show_visualizations = true ;
+do_show_visualizations = false ;
 fignum = 101;
 
 projectionThr = 20; % distance between target and projected point has to be less than this number
@@ -139,8 +139,9 @@ paired_descriptor_for_this_tile_template{2}.Y = [];
 try parfor_progress(0);catch;end
 parfor_progress(neigs_row_count) ;
 
+parfor neigs_row_index = 1:neigs_row_count ,
 %for neigs_row_index = 1:neigs_row_count ,
-for neigs_row_index = round(neigs_row_count/2):neigs_row_count ,
+%for neigs_row_index = round(neigs_row_count/2):neigs_row_count ,
 %tile_index_of_interest = find(strcmp('/2020-12-01/01/01916', scopeloc.relativepaths))
 %for tile_index = tile_index_of_interest ,
     %% load descriptor pairs X (center) - Y (adjacent tile)
