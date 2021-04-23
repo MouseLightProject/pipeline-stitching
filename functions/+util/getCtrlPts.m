@@ -23,7 +23,7 @@ end
 [xgrid, ygrid] = meshgrid(xg, yg);
 toppts(:,1) = xgrid(:);
 toppts(:,2) = ygrid(:);
-toppts(:,3) = 0;
+%toppts(:,3) = 0;
 
 [~, IX] = sort(toppts(:,2), 'ascend');
 toppts = toppts(IX,:);

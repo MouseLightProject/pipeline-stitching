@@ -15,7 +15,7 @@ function [st,ed] = getcontolpixlocations(scopeloc, params, scopeparams)
     %i2 = find(gridix(:,1)==s2(1)&gridix(:,2)==s2(2)&gridix(:,3)==s2(3)) ;
     i2 = find(all(gridix_xyz == s2, 2)) ;
     sdiff_old = abs(diff(loc([i2 i1],:)))*1000
-    sdiff = abs(compute_sdiff(gridix_xyz, loc))*1000  
+    sdiff = abs(compute_sdiff(gridix_xyz, loc))*1000
     overlap_um = round(imsize_um-sdiff);
     pixsize = imsize_um./(scopeparams1dims-1);
     ovelap_px = round(overlap_um./pixsize);

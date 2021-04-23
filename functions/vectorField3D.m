@@ -1,120 +1,131 @@
 function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,theselayers)
     fprintf('Calculating vector fields\n') ;
-    Nlayer = params.Nlayer;
-    Npts = (params.Ndivs+1).^2;
-    dims = params.imagesize;
-    order = params.order;
-    zlimdefaults = [2 20 dims(3)-21 dims(3)-3];
-    params.zlimdefaults = zlimdefaults;
-    %beadparams = params.beadparams;
-    params.applyFC=1;
-    
-    tileneighbors = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
-    % checkthese = [1 4 5 7]; % 0 - right - bottom - below
-    % tileneighbors = tileneighbors(:,checkthese);
-    
-    % initialize points
     tile_count = length(scopeloc.filepath) ;
-    % xy crop for minimal overlap
-    [st,ed] = util.getcontolpixlocations(scopeloc,params,scopeparams) ;
-    [corrctrlpnttmp_,xlim_cntrl,ylim_cntrl] = util.getCtrlPts(params.imagesize(1),params.imagesize(2),params,st,ed) ;
-    % zlimdefaults = [5 25 dims(3)-26 dims(3)-6];
-    subcorrctrlpnttmp = corrctrlpnttmp_ + 1 ;
+    cpg_k_count = params.Nlayer ;  % Number of k/z values in the per-tile control point grid (traditionally 4)
+    cpg_i_count = params.Ndivs+1 ;  % Number of i/x values in the per-tile control point grid (traditionally 5)
+    cpg_j_count = params.Ndivs+1 ;  % Number of j/y values in the per-tile control point grid (traditionally 5)    
+    cpg_ij_count = cpg_i_count * cpg_j_count ;  % Number of points in each k/z layer in the per-tile control point grid (traditionally 25)
+    tile_shape_ijk = params.imagesize ;  % tile shape, in xyz order (traditionally [1024 1536 251])
+    order = params.order ;  % order of the field curvature model, I think
+    default_cpg_k0_values = [2 20 tile_shape_ijk(3)-20-1 tile_shape_ijk(3)-2-1] ;  
+      % The z values in the control point gird (traditionally [2 20 230 248])
+      % If these are symmetric, it implies that this is using zero-based indexing.
+    %params.zlimdefaults = zlimdefaults;
+    do_apply_FC = 1 ;  % whether or not to apply the field correction, I think
+
+    % Build the neighbor index
+    tileneighbors = buildNeighbor(scopeloc.gridix(:,1:3));  % tile_count x 7, each row in [self -x -y +x +y -z +z] format
     
-    afftransform = reshape([scopeparams(:).affineglFC],3,3,[]);
-    % flip x/y dimensions to match imaging
-    mflip = -eye(3);%mflip(3,3)=1;
-    for ii = 1 : size(afftransform,3) ,
-        afftransform(:,:,ii) = afftransform(:,:,ii) * mflip ;
+    % Determine the x-y grid used for the control points of the barymetric transform
+    % in the per-tile space.
+    % The x-y grid a crop of the full tile x-y range, to minimize overlap between
+    % tiles in the rendered space.
+    [st, ed] = util.getcontolpixlocations(scopeloc, params, scopeparams) ;  % st 3x1, the first x/y/z lim in each dimension; ed 3x1, the last x/y/z lim in each dimension
+    [cpg_ij0s, cpg_i0_values, cpg_j0_values] = ...
+        util.getCtrlPts(tile_shape_ijk(1), tile_shape_ijk(2), params, st, ed) ;  % "cpg" is the "control point grid"
+      % cpg_i0_values is traditionally 1 x 5, gives the i/x values used in the control
+      % point grid.  Uses zero-based indexing
+      % cpg_j0_values is traditionally 1 x 5, gives the j/y values used in the control
+      % point grid.  Uses zero-based indexing
+      % cpg_ij0s is traditionally 25 x 2, gives all the combinations of cpg_i0_values
+      % and cpg_j0_values.  I.e. it's a raster-scan of the xy grid in the tile
+    cpg_ij1s = cpg_ij0s + 1 ;  % traditionally 25 x 2, the ij/xy coords of the control point grid in each tile, in each z plane
+    
+    % Get the linear transform used for each tile
+    % Need to flip the x/y dimensions in the per-tile linear transform to match
+    % imaging
+    raw_linear_transform_from_tile_index = reshape([scopeparams(:).affineglFC],3,3,[]);
+    mflip = -eye(3) ;
+    linear_transform_from_tile_index = zeros(size(raw_linear_transform_from_tile_index)) ;
+    for ii = 1 : size(raw_linear_transform_from_tile_index,3) ,
+        linear_transform_from_tile_index(:,:,ii) = raw_linear_transform_from_tile_index(:,:,ii) * mflip ;
     end
 
-    % for efficiency reasons precompute this
-    xlocs = 1:dims(1);
-    ylocs = 1:dims(2);
-    [xy2,xy1] = ndgrid(ylocs(:),xlocs(:));
-    xy = [xy1(:),xy2(:)];
+    % For efficiency reasons, precompute the grid of i,j values in each plane of the
+    % tile (for all pixels, not on the control point grid)
+    xlocs = 1:tile_shape_ijk(1) ;
+    ylocs = 1:tile_shape_ijk(2) ;
+    [xy2, xy1] = ndgrid(ylocs(:), xlocs(:)) ;
+    tile_ij1s = [xy1(:), xy2(:)] ;  % tile_shape_ijk(1)*tile_shape_ijk(2) x 2, the ij1/xy coords of each pixel in a z plane of the tile stack
 
-    %
-    control = zeros(Npts*Nlayer, 3, tile_count);
-    topcntrl1 = zeros(Npts, 3, tile_count);
-    topcntrl2 = zeros(Npts, 3, tile_count);
-    botcntrl1 = zeros(Npts, 3, tile_count);
-    botcntrl2 = zeros(Npts, 3, tile_count);
-    zlim_cntrl = zeros(Nlayer, tile_count);
-    afftile = zeros(3, 4, tile_count);
-    pixstats = nan(tile_count,8);
+    % Extract the root of the raw tiles folder 
+    filep = strsplit(scopeloc.filepath{1},'/') ;
+    vecfield_root = fullfile('/',filep{1:end-4}) ;  % e.g. '/groups/mousebrainmicro/mousebrainmicro/data/2020-09-15/Tiling'
 
-    filep = strsplit(scopeloc.filepath{1},'/');
-    vecfield.root = fullfile('/',filep{1:end-4});
-
-    % INIT
+    % Get the relative path to each tile from scopeloc
+    vecfield_path = cell(1, tile_count) ;
     for tile_index = 1 : tile_count ,
-        % copy path
-        filepath = fileparts(scopeloc.filepath{tile_index});
-        vecfield.path{tile_index} = filepath(length(vecfield.root)+1:end);
+        filepath = fileparts(scopeloc.filepath{tile_index}) ;
+        vecfield_path{tile_index} = filepath(length(vecfield_root)+1:end) ;  % e.g. '/2020-09-25/00/00000'
+    end
+    
+    % Compute the affine transform for each tile
+    affine_transform_from_tile_index = zeros(3, 4, tile_count) ;  % nm
+    for tile_index = 1 : tile_count ,
         % form an affine matrix
-        tform = [afftransform(:,:,tile_index) scopeloc.loc(tile_index,:)'*1e6];
-        afftile(:,:,tile_index) = tform;
+        linear_transform = linear_transform_from_tile_index(:,:,tile_index) ;  % nm
+        nominal_tile_offset_in_mm = scopeloc.loc(tile_index,:) ;  % 1x3, mm
+        nominal_tile_offset_in_nm = 1e6 * nominal_tile_offset_in_mm ;  % 1x3, nm        
+        affine_transform = [linear_transform nominal_tile_offset_in_nm'] ;  % nm
+        affine_transform_from_tile_index(:,:,tile_index) = affine_transform ;
+    end
 
+    % Compute the first pass as the control point targets in the rendered space
+    targets_from_tile_index = zeros(cpg_ij_count*cpg_k_count, 3, tile_count) ;  % Location of each control point in the rendered space, for each tile
+    for tile_index = 1 : tile_count ,
         % field curvature
-        %[locs,xshift2D,yshift2D] = util.fcshift(curvemodel(:,:,tile_index),order,xy,dims,subcorrctrlpnttmp);
-        locs = util.fcshift(curvemodel(:,:,tile_index),order,xy,dims,subcorrctrlpnttmp);
-        corrctrlpnttmp = locs-1;
+        this_tile_curve_model = curvemodel(:,:,tile_index) ;
+        field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;  % 25 x 2, one-based ij coordinates, but non-integral
+        field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ; % 25 x 2, zero-based ij coordinates, but non-integral
 
-        % top layer at z=15: as we have some noisy data at the top
-        zlim_1 = zlimdefaults(1);
-        corrctrlpnttmp(:,3)= zlim_1;
-        contr_t_top1 = [corrctrlpnttmp ones(Npts,1)]*tform';
+        % Get the affine transform
+        affine_transform = affine_transform_from_tile_index(:,:,tile_index) ;
+        
+        % Compute the initial targets at each z plane of the control point grid
+        targets_from_cpg_k_index = zeros(cpg_ij_count, 3, cpg_k_count) ;        
+        for cpg_k_index = 1 : cpg_k_count ,
+            field_corrected_cpg_ijk0s = zeros(cpg_ij_count, 3) ;
+            field_corrected_cpg_ijk0s(:,1:2) = field_corrected_cpg_ij0s ;
+            field_corrected_cpg_ijk0s(:,3) = default_cpg_k0_values(cpg_k_index) ;
+            targets_at_this_cpg_k_index = add_ones_column(field_corrected_cpg_ijk0s) * affine_transform' ;
+            targets_from_cpg_k_index(:, :, cpg_k_index) = targets_at_this_cpg_k_index ;
+        end                   
 
-        % second layer at z=25
-        zlim_2 = zlimdefaults(2);
-        corrctrlpnttmp(:,3)= zlim_2;
-        contr_t_top2 = [corrctrlpnttmp ones(Npts,1)]*tform';
+        % Stuff it all into the targets_from_tile_index array
+        targets = reshape(targets_from_cpg_k_index, [cpg_ij_count*cpg_k_count 3]) ;
+        targets_from_tile_index(:, :, tile_index) = targets ;
+    end
 
-        % third layer at z=251-26
-        zlim_3 = zlimdefaults(3);
-        corrctrlpnttmp(:,3)= zlim_3;
-        contr_t_bot1 = [corrctrlpnttmp ones(Npts,1)]*tform';
-
-        % forth layer at z=251-16
-        zlim_4 = zlimdefaults(4);
-        corrctrlpnttmp(:,3)= zlim_4;
-        contr_t_bot2 = [corrctrlpnttmp ones(Npts,1)]*tform';
-
-        topcntrl1(:,:,tile_index) = contr_t_top1;
-        topcntrl2(:,:,tile_index) = contr_t_top2;
-        botcntrl1(:,:,tile_index) = contr_t_bot1;
-        botcntrl2(:,:,tile_index) = contr_t_bot2;
-
-        control(1:2*Npts,:,tile_index) = [contr_t_top1;contr_t_top2];
-        control(2*Npts+1:end,:,tile_index) = [contr_t_bot1;contr_t_bot2];
-        zlim_cntrl(:,tile_index) = [zlim_1 zlim_2 zlim_3 zlim_4];
-
+    % The first pass of the z planes of the control points, for each tile
+    cpg_k0_values_from_tile_index = repmat(default_cpg_k0_values', [1 tile_count]) ;
+    
+    % Collect some information about the point correspondences for each tile
+    match_statistics = nan(tile_count, 8) ;
+    for tile_index = 1 : tile_count ,
         % pix stats
-        layer = regpts{tile_index}.X;
-        layerp1 = regpts{tile_index}.Y;
-        if isempty(layer)
+        this_tile_regpts = regpts{tile_index} ;
+        match_coords = this_tile_regpts.X ;  % match_count x 3, the coordinates of matched landmarks in this tile
+        match_coords_in_neighbor = this_tile_regpts.Y ;  % match_count x 3, the coordinates of matched landmarks in the z+1 tile, in same order as layer
+        if isempty(match_coords) ,
             continue
         end
-        meddesc = round(median([layer(:,3) layerp1(:,3)],1));
-        mindesc = round(min([layer(:,3) layerp1(:,3)],[],1));
-        maxdesc = round(max([layer(:,3) layerp1(:,3)],[],1));
-        pixstats(tile_index,:) = [tile_index  regpts{tile_index}.neigs(4) meddesc mindesc maxdesc];
-        % pixstats(62,2:end) = pixstats(1162,2:end);
-    end
-
-    Rmin = min(scopeloc.loc)*1e6;
-    Rmin=Rmin*.995;
-    Rmax = round((max(scopeloc.loc)*1e3+scopeparams(1).imsize_um)*1e3);
-    Rmax=Rmax*1.005;
+        match_z_in_both_tiles = [ match_coords(:,3) match_coords_in_neighbor(:,3) ] ;  % match_count x 2
+        median_match_z_in_both_tiles = round(median(match_z_in_both_tiles,1)) ; % 1x2
+        min_match_z_in_both_tiles = round(min(match_z_in_both_tiles,[],1)) ; % 1x2
+        max_match_z_in_both_tiles = round(max(match_z_in_both_tiles,[],1)) ; % 1x2
+        tile_index_of_z_plus_1_tile = this_tile_regpts.neigs(4) ;
+        match_statistics(tile_index,:) = ...
+            [ tile_index  tile_index_of_z_plus_1_tile ...
+              median_match_z_in_both_tiles min_match_z_in_both_tiles max_match_z_in_both_tiles ] ;
+    end   
+    
     targetidx = [];
-    latticeZRange = unique(scopeloc.gridix(:,3));
+    latticeZRange = unique(scopeloc.gridix(:,3)) ;
     if nargin<6 || isempty(theselayers) ,
-        theselayers=latticeZRange(1:end-1)';
+        theselayers = latticeZRange(1:end-1)' ;
     end
-    nooptim = NaN(1,tile_count);
+    nooptim = NaN(1,tile_count) ;
     for t = theselayers ,
-        %
         fprintf(['    Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) '\n']);
         ix = (scopeloc.gridix(:,3)'==t);
         idxinlayer = find(ix);
@@ -124,153 +135,125 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
         end
         
         % get interpolants based on paired descriptors
-        [Fxt, Fyt, Fzt, Fxtp1, Fytp1, Fztp1,XYZ_tori,XYZ_tp1ori,outliers] =...
-            util.getInterpolants(ix,regpts,afftile,params,curvemodel);
+        [Fxt, Fyt, Fzt, Fxtp1, Fytp1, Fztp1, XYZ_tori, XYZ_tp1ori, outliers] =...
+            util.getInterpolants(ix, regpts, affine_transform_from_tile_index, params, curvemodel, do_apply_FC) ;
         
-        %
         if params.debug ,
-            %[bandwidth,density,X,Y]=kde2d(XYZ_tori(:,1:2),256,Rmin(1:2),Rmax(1:2));
-            figure(35), clf, cla,
-            view([0,90])
-            set(gca,'Ydir','reverse')
-            hold on
-            colormap hot,
-            set(gca, 'color', 'w');
-            %         plot(XYZ_tori(:,1),XYZ_tori(:,2),'w+','MarkerSize',5)
-
-            plot3(XYZ_tori(:,1),XYZ_tori(:,2),XYZ_tori(:,3),'k.') % layer t
-            plot3(XYZ_tp1ori(:,1),XYZ_tp1ori(:,2),XYZ_tp1ori(:,3),'r.') % layer tp1
-            myplot3(XYZ_tori(outliers,:),'md') % layer t
-            myplot3(XYZ_tori(outliers,:),'gd') % layer t
-            x = scopeloc.loc(ix,1)*1e6;
-            y = scopeloc.loc(ix,2)*1e6;
-            w = scopeparams(1).imsize_um(1)*ones(sum(ix),1)*1e3;
-            h = scopeparams(1).imsize_um(2)*ones(sum(ix),1)*1e3;
-            for ii=1:sum(ix)
-                rectangle('Position', [x(ii)-w(ii) y(ii)-h(ii) w(ii) h(ii)],'EdgeColor','r')
-                text(x(ii)-w(ii)/2,y(ii)-h(ii)/2,2,sprintf('%d: %d',ii,idxinlayer(ii)),...
-                    'Color','m','HorizontalAlignment','center','FontSize',8)
-            end
-
-            for ii=find(idxinlayer==5163)
-                rectangle('Position', [x(ii)-w(ii) y(ii)-h(ii) w(ii) h(ii)],'EdgeColor','w','LineWidth',2,'FaceColor',[0 .5 .5])
-            end
-            %surfc(X,Y,density/max(density(:)),'LineStyle','none'),
-            set(gca,'Ydir','reverse')
-            %         legend('P_t','P_{t+1}','E_t','E_{t+1}')
-            set(gca, ...
-                'Box'         , 'on'     , ...
-                'TickDir'     , 'out'     , ...
-                'TickLength'  , [.02 .02]/2 , ...
-                'XTickLabel'  , (1:10) , ...
-                'YTickLabel'  , (1:10) , ...
-                'XMinorTick'  , 'on'      , ...
-                'YMinorTick'  , 'on'      , ...
-                'XGrid'       , 'on'      , ...
-                'YGrid'       , 'on'      , ...
-                'XColor'      , [.3 .3 .3], ...
-                'YColor'      , [.3 .3 .3], ...
-                'LineWidth'   , 1         );
-            ax = gca;
-            ax.YLabel.String = 'mm';
-            ax.YLabel.FontSize = 16;
-            ax.XLabel.String = 'mm';
-            ax.XLabel.FontSize = 16;
-            xlim([Rmin(1) Rmax(1)]-params.imsize_um(1)*1e3)
-            ylim([Rmin(2) Rmax(2)]-params.imsize_um(2)*1e3)
-            % title([num2str(t),' - '])
-            drawnow
-            %
-            vizfolder = 'qualityfold' ;
-            if ~exist(vizfolder,'dir')
-                mkdir(vizfolder)
-            end
-            export_fig(fullfile(vizfolder,sprintf('Slice-%05d.png',t)))
+            vector_field_3d_debug_script(scopeloc, scopeparams, params, XYZ_tori, XYZ_tp1ori, outliers) ;
         end
         
-        %
         if isempty(Fxt) || size(Fxt.Points,1)<10 ,
             fprintf(['    MISSING SLICE @ Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) '\n']);
-            continue,
+            continue
         else
             fprintf(['    Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) ' totDesc: ' num2str(size(Fxt.Points,1)) '\n']);
         end
         
-        %
         for tile_index = idxinlayer ,  % layer t
             if ~isempty(targetidx)
                 if ~any(tile_index==targetidx)
                     continue
                 end
             end
-            %idxtm1 = tileneighbors(tile_index,6);
-            idxtp1 = tileneighbors(tile_index,7);
+            neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile
 
-            %
-            locs = util.fcshift(curvemodel(:,:,tile_index),order,xy,dims,subcorrctrlpnttmp) ;
-            corrctrlpnttmp = locs-1;
+            this_tile_curve_model = curvemodel(:,:,tile_index) ;
+            field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
+            field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ;
 
-            [nooptim(tile_index),control_t_bot12,control_tp1_top12,zlim_cntrl] = optimpertile...
-                (tile_index,params,tileneighbors,afftile,pixstats,zlim_cntrl,corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1);
-            if nooptim(tile_index) % nomatch with below
-
-            elseif isempty(control_tp1_top12) % no below adjacent tile
-                control(2*Npts+1:end,:,tile_index) = control_t_bot12;
+            [nooptim_this_tile, ...
+             control_t_bot12, ...
+             control_tp1_top12, ...
+             cpg_k0_values_from_tile_index] = ...
+                optimpertile(tile_index, ...
+                             params, ...
+                             tileneighbors, ...
+                             affine_transform_from_tile_index, ...
+                             match_statistics, ...
+                             cpg_k0_values_from_tile_index, ...
+                             field_corrected_cpg_ij0s, ...
+                             Fxt, ...
+                             Fyt, ...
+                             Fzt, ...
+                             Fxtp1, ...
+                             Fytp1, ...
+                             Fztp1, ...
+                             default_cpg_k0_values) ;
+            nooptim(tile_index) = nooptim_this_tile ;
+            if nooptim_this_tile ,
+                % do nothing, will call nomatchoptim() for this tile below
+            elseif isempty(control_tp1_top12) ,  % no below adjacent tile
+                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
             else
-                control(2*Npts+1:end,:,tile_index) = control_t_bot12;
-                control(1:2*Npts,:,idxtp1) = control_tp1_top12;
+                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
+                targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = control_tp1_top12 ;
             end
 
         end
         
-        %
-        anchorinds = idxinlayer(~nooptim(idxinlayer));
-        anchors = scopeloc.gridix(anchorinds,:);        
-        queryinds = idxinlayer(nooptim(idxinlayer)>0);
-        queries = scopeloc.gridix(queryinds,:);
-        IDX_nn = knnsearch(anchors,queries,'K',1);
-        IDX = rangesearch(anchors,queries,sqrt(2));
+        anchorinds = idxinlayer(~nooptim(idxinlayer)) ;
+        anchors = scopeloc.gridix(anchorinds,:) ;        
+        queryinds = idxinlayer(nooptim(idxinlayer)>0) ;
+        queries = scopeloc.gridix(queryinds,:) ;
+        IDX_nn = knnsearch(anchors,queries,'K',1) ;
+        IDX = rangesearch(anchors,queries,sqrt(2)) ;
         
-        %
         for ine = 1 : length(queryinds) ,
             if isempty(IDX{ine})
                 IDX{ine} = IDX_nn(ine);
             end
         end
         
-        %
         for tile_index = idxinlayer ,  % layer t
-            % idxtm1 = tileneighbors(tile_index,6);
-            idxtp1 = tileneighbors(tile_index,7);
-            if nooptim(tile_index)
+            neighbor_tile_index = tileneighbors(tile_index,7) ;
+            if nooptim(tile_index) ,
                 is_query =(tile_index==queryinds) ;
-                zlimdefaults = round(median(zlim_cntrl(:,anchorinds(IDX{is_query})),2))';
+                default_cpg_k0_values = round(median(cpg_k0_values_from_tile_index(:,anchorinds(IDX{is_query})),2))' ;
                 
-                [nooptim(tile_index),control_t_bot12,control_tp1_top12,zlim_cntrl] = ...
-                    nomatchoptim(tile_index,params,tileneighbors,afftile,pixstats,zlim_cntrl,corrctrlpnttmp,...
-                                 Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1,zlimdefaults);
+                [nooptim(tile_index), ...
+                 control_t_bot12, ...
+                 control_tp1_top12, ...
+                 cpg_k0_values_from_tile_index] = ...
+                    nomatchoptim(tile_index, ...
+                                 params, ...
+                                 tileneighbors, ...
+                                 affine_transform_from_tile_index, ...
+                                 match_statistics, ...
+                                 cpg_k0_values_from_tile_index, ...
+                                 field_corrected_cpg_ij0s, ...
+                                 Fxt, ...
+                                 Fyt, ...
+                                 Fzt, ...
+                                 Fxtp1, ...
+                                 Fytp1, ...
+                                 Fztp1, ...
+                                 default_cpg_k0_values) ;
 
-                control(2*Npts+1:end,:,tile_index) = control_t_bot12;
-                control(1:2*Npts,:,idxtp1) = control_tp1_top12;
+                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
+                targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = control_tp1_top12 ;
             end
         end
     end
-    bbox = zeros(8,3,tile_count);
-    origin = zeros(tile_count,3);
-    sz = zeros(tile_count,3);
-    for i = 1:tile_count
-        [bbox(:,:,i), origin(i,:), sz(i,:)] = util.bboxFromCorners(control(:,:,i));
+    
+    % Compute bounding boxes for each tile
+    bbox = zeros(8,3,tile_count) ;
+    origin = zeros(tile_count,3) ; 
+    sz = zeros(tile_count,3) ;
+    for tile_index = 1 : tile_count ,
+        targets = targets_from_tile_index(:,:,tile_index) ;
+        [bbox(:,:,tile_index), origin(tile_index,:), sz(tile_index,:)] = ...
+            util.bboxFromCorners(targets) ;
     end
     
     % Update per-tile affine transforms based on control points
     fprintf('Updating per-tile affine transforms based on control points...\n')
-    tform = zeros(5,5,tile_count);
-    numX = size(control(:,:,1),1);
+    affine_transform = zeros(5,5,tile_count);
+    numX = size(targets_from_tile_index(:,:,1),1);
     for tile_index = 1 : tile_count ,
-        X = control(:,:,tile_index)'/1000;
-        x = xlim_cntrl;
-        y = ylim_cntrl;
-        z = zlim_cntrl(:,tile_index)';
+        X = targets_from_tile_index(:,:,tile_index)'/1000;
+        x = cpg_i0_values;
+        y = cpg_j0_values;
+        z = cpg_k0_values_from_tile_index(:,tile_index)';
         [xx,yy,zz] = ndgrid(x,y,z);
         r = [xx(:),yy(:),zz(:)]';
         X_aug = [X;ones(1,numX)];
@@ -281,20 +264,22 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
         Aest(1:3,1:3) = A(1:3,1:3)*1000;
         Aest(1:3,5) = A(1:3,4)*1000;
         Aest(5,1:3) = A(4,1:3)*1000;
-        tform(:,:,tile_index) = Aest;
+        affine_transform(:,:,tile_index) = Aest;
     end
     fprintf('Done updating per-tile affine transforms based on control points.\n')
     
     % Package everything up in a single struct for return
     vecfield = struct() ;
-    vecfield.control = control;
-    vecfield.xlim_cntrl = xlim_cntrl;
-    vecfield.ylim_cntrl = ylim_cntrl;
-    vecfield.zlim_cntrl = zlim_cntrl;
-    vecfield.afftile = afftile;
-    vecfield.tform = tform;
-    vecfield.corrctrlpnttmp = corrctrlpnttmp;
-    vecfield.ctrlpnttmp = subcorrctrlpnttmp-1;
+    vecfield.root = vecfield_root ;
+    vecfield.path = vecfield_path ;
+    vecfield.control = targets_from_tile_index;
+    vecfield.xlim_cntrl = cpg_i0_values;
+    vecfield.ylim_cntrl = cpg_j0_values;
+    vecfield.zlim_cntrl = cpg_k0_values_from_tile_index;
+    vecfield.afftile = affine_transform_from_tile_index;
+    vecfield.tform = affine_transform;
+    vecfield.corrctrlpnttmp = field_corrected_cpg_ij0s;
+    vecfield.ctrlpnttmp = cpg_ij1s-1;
     vecfield.bbox = bbox;
     vecfield.origin = origin;
     vecfield.sz = sz;

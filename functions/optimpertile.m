@@ -1,5 +1,5 @@
 function [nooptim,control_t_bot12,control_tp1_top12,zlim_cntrl]=...
-    optimpertile(idxt,params,tileneighbors,afftile,pixstats,zlim_cntrl,corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1)
+    optimpertile(idxt,params,tileneighbors,afftile,pixstats,zlim_cntrl,corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1,zlimdefaults)
 nooptim = false;
 [control_t_bot12,control_tp1_top12] = deal([]);
 htop = params.htop;
@@ -7,7 +7,7 @@ Nlayer = params.Nlayer;
 Npts = (params.Ndivs+1).^2;
 dims = params.imagesize;
 order = params.order;
-zlimdefaults = params.zlimdefaults;
+%zlimdefaults = params.zlimdefaults;
 
 noopt = 0; % no optimization
 

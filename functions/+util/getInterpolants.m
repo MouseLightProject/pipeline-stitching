@@ -1,5 +1,5 @@
 function [Fxt, Fyt, Fzt, Fxtp1, Fytp1, Fztp1,XYZ_tori,XYZ_tp1ori,outliers] = ...
-    getInterpolants(ix,regpts,afftile,params,curvemodel)
+    getInterpolants(ix,regpts,afftile,params,curvemodel,applyFC)
 
 viz = params.viz;
 dims = params.imagesize;
@@ -10,11 +10,11 @@ if isfield(params,'order')
 else
     order = 1;
 end
-if isfield(params,'applyFC')
-    applyFC = params.applyFC;
-else
-    applyFC = 0;
-end
+% if isfield(params,'applyFC')
+%     applyFC = params.applyFC;
+% else
+%     applyFC = 0;
+% end
 
 xlocs = 1:dims(1);
 ylocs = 1:dims(2);

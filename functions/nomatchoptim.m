@@ -1,6 +1,6 @@
 function [nooptim,control_t_bot12,control_tp1_top12,zlim_cntrl] = ...
     nomatchoptim(idxt,params,tileneighbors,afftile,pixstats,zlim_cntrl,...
-    corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1,zlimdefaults)
+                 corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1,zlimdefaults)
 
 nooptim = false;
 htop = params.htop;
@@ -8,9 +8,9 @@ Nlayer = params.Nlayer;
 Npts = (params.Ndivs+1).^2;
 dims = params.imagesize;
 order = params.order;
-if nargin<14
-    zlimdefaults = params.zlimdefaults;
-end
+% if nargin<14
+%     zlimdefaults = params.zlimdefaults;
+% end
 
 noopt = 0; % no optimization
 

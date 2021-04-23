@@ -1,4 +1,4 @@
-function [outputArgs] = writeYML(outfile, inds, vecfield, big, ymldims, root)
+function writeYML(outfile, inds, vecfield, big, ymldims, root)
 %WRITEYML Summary of this function goes here
 % 
 % [OUTPUTARGS] = WRITEYML(INPUTARGS) Explain usage here
