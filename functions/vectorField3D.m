@@ -92,7 +92,14 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
         end                   
 
         % Stuff it all into the targets_from_tile_index array
-        targets = reshape(targets_from_cpg_k_index, [cpg_ij_count*cpg_k_count 3]) ;
+        %targets = reshape(targets_from_cpg_k_index, [cpg_ij_count*cpg_k_count 3]) ;
+        %  ^ this gets the order wrong        
+        targets = zeros(cpg_ij_count*cpg_k_count,3) ;
+        offset = 0 ;
+        for cpg_k_index = 1 : cpg_k_count ,
+            targets(offset+1:offset+cpg_ij_count,:) = targets_from_cpg_k_index(:,:,cpg_k_index) ;
+            offset = offset + cpg_ij_count ;
+        end        
         targets_from_tile_index(:, :, tile_index) = targets ;
     end
 
