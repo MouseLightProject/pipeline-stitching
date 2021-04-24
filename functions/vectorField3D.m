@@ -1,4 +1,4 @@
-function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,theselayers)
+function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemodel, tile_k_from_run_layer_index)
     fprintf('Calculating vector fields\n') ;
     tile_count = length(scopeloc.filepath) ;
     cpg_k_count = params.Nlayer ;  % Number of k/z values in the per-tile control point grid (traditionally 4)
@@ -14,7 +14,7 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
     do_apply_FC = 1 ;  % whether or not to apply the field correction, I think
 
     % Build the neighbor index
-    tileneighbors = buildNeighbor(scopeloc.gridix(:,1:3));  % tile_count x 7, each row in [self -x -y +x +y -z +z] format
+    tileneighbors = buildNeighbor(scopeloc.gridix(:,1:3)) ;  % tile_count x 7, each row in [self -x -y +x +y -z +z] format
     
     % Determine the x-y grid used for the control points of the barymetric transform
     % in the per-tile space.
@@ -126,42 +126,44 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
               median_match_z_in_both_tiles min_match_z_in_both_tiles max_match_z_in_both_tiles ] ;
     end   
     
-    targetidx = [];
-    latticeZRange = unique(scopeloc.gridix(:,3)) ;
-    if nargin<6 || isempty(theselayers) ,
-        theselayers = latticeZRange(1:end-1)' ;
+    tile_k_from_tile_index = scopeloc.gridix(:,3) ;  % column
+    tile_k_from_layer_index = unique(tile_k_from_tile_index) ;  % layer of tiles, that is
+    if nargin<6 || isempty(tile_k_from_run_layer_index) ,
+        tile_k_from_run_layer_index = tile_k_from_layer_index(1:end-1)' ;  % a "run layer" is a layer that will actually be run
     end
-    nooptim = NaN(1,tile_count) ;
-    for t = theselayers ,
-        fprintf(['    Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) '\n']);
-        ix = (scopeloc.gridix(:,3)'==t);
-        idxinlayer = find(ix);
-        if sum(ix)<1 ,
-            fprintf(['No tiles found in layer #' num2str(t) '!!\n']);
+    do_run_nomatchoptim_from_tile_index = NaN(1,tile_count) ;
+    run_layer_count = length(tile_k_from_run_layer_index) ;
+    for run_layer_index = 1 : run_layer_count ,
+        % Sort out which tiles are in this layer
+        tile_k = tile_k_from_run_layer_index(run_layer_index) ;
+        fprintf('    Layer %d of %d, at tile k/z of %d\n', run_lyaer_index, run_layer_count, tile_k);
+        is_in_this_layer_from_tile_index = (tile_k_from_tile_index'==tile_k) ;
+        tile_index_from_tile_within_layer_index = find(is_in_this_layer_from_tile_index);
+        if isempty(tile_index_from_tile_within_layer_index) ,
+            fprintf('No tiles found in layer with tile k/z of %d!!\n', tile_k) ;
             continue
         end
         
         % get interpolants based on paired descriptors
-        [Fxt, Fyt, Fzt, Fxtp1, Fytp1, Fztp1, XYZ_tori, XYZ_tp1ori, outliers] =...
-            util.getInterpolants(ix, regpts, affine_transform_from_tile_index, params, curvemodel, do_apply_FC) ;
-        
+        [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, XYZ_original, XYZ_neighbor_original, outliers] =...
+            util.getInterpolants(is_in_this_layer_from_tile_index, regpts, affine_transform_from_tile_index, params, curvemodel, do_apply_FC) ;
+
+        % Show some debugging output if called for
         if params.debug ,
-            vector_field_3d_debug_script(scopeloc, scopeparams, params, XYZ_tori, XYZ_tp1ori, outliers) ;
+            vector_field_3d_debug_script(scopeloc, scopeparams, params, XYZ_original, XYZ_neighbor_original, outliers) ;
         end
         
-        if isempty(Fxt) || size(Fxt.Points,1)<10 ,
-            fprintf(['    MISSING SLICE @ Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) '\n']);
+        % If too few matched landmarks, don't proceed with this layer
+        if isempty(Fx) || size(Fx.Points,1) < 10 ,
+            fprintf('    MISSING SLICE @ layer with k/z = %d\n', tile_k) ;            
             continue
-        else
-            fprintf(['    Layer ' num2str(t) ' of ' num2str(max(scopeloc.gridix(:,3))) ' totDesc: ' num2str(size(Fxt.Points,1)) '\n']);
         end
         
-        for tile_index = idxinlayer ,  % layer t
-            if ~isempty(targetidx)
-                if ~any(tile_index==targetidx)
-                    continue
-                end
-            end
+        % Print the number of matches in this layer
+        match_count = size(Fx.Points,1) ;
+        fprintf('    Layer with k/z = %d total matches: %d\n', match_count);
+        
+        for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
             neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile
 
             this_tile_curve_model = curvemodel(:,:,tile_index) ;
@@ -172,7 +174,7 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
 %                keyboard
 %             end             
             
-            [nooptim_this_tile, ...
+            [do_run_nomatchoptim, ...
              control_t_bot12, ...
              control_tp1_top12, ...
              cpg_k0_values_from_tile_index] = ...
@@ -183,15 +185,15 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
                              match_statistics, ...
                              cpg_k0_values_from_tile_index, ...
                              field_corrected_cpg_ij0s, ...
-                             Fxt, ...
-                             Fyt, ...
-                             Fzt, ...
-                             Fxtp1, ...
-                             Fytp1, ...
-                             Fztp1, ...
+                             Fx, ...
+                             Fy, ...
+                             Fz, ...
+                             Fx_neighbor, ...
+                             Fy_neighbor, ...
+                             Fz_neighbor, ...
                              default_cpg_k0_values) ;
-            nooptim(tile_index) = nooptim_this_tile ;
-            if nooptim_this_tile ,
+            do_run_nomatchoptim_from_tile_index(tile_index) = do_run_nomatchoptim ;
+            if do_run_nomatchoptim ,
                 % do nothing, will call nomatchoptim() for this tile below
             elseif isempty(control_tp1_top12) ,  % no below adjacent tile
                 targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
@@ -202,9 +204,9 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
 
         end
         
-        anchorinds = idxinlayer(~nooptim(idxinlayer)) ;
+        anchorinds = tile_index_from_tile_within_layer_index(~do_run_nomatchoptim_from_tile_index(tile_index_from_tile_within_layer_index)) ;
         anchors = scopeloc.gridix(anchorinds,:) ;        
-        queryinds = idxinlayer(nooptim(idxinlayer)>0) ;
+        queryinds = tile_index_from_tile_within_layer_index(do_run_nomatchoptim_from_tile_index(tile_index_from_tile_within_layer_index)>0) ;
         queries = scopeloc.gridix(queryinds,:) ;
         IDX_nn = knnsearch(anchors,queries,'K',1) ;
         IDX = rangesearch(anchors,queries,sqrt(2)) ;
@@ -215,18 +217,18 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
             end
         end
         
-        for tile_index = idxinlayer ,  % layer t
+        for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
             neighbor_tile_index = tileneighbors(tile_index,7) ;
             
 %             if tile_index == 2137 || neighbor_tile_index == 2137 ,
 %                keyboard
 %             end            
 
-            if nooptim(tile_index) ,
+            if do_run_nomatchoptim_from_tile_index(tile_index) ,
                 is_query =(tile_index==queryinds) ;
                 local_default_cpg_k0_values = round(median(cpg_k0_values_from_tile_index(:,anchorinds(IDX{is_query})),2))' ;
                 
-                [nooptim(tile_index), ...
+                [do_run_nomatchoptim_from_tile_index(tile_index), ...
                  control_t_bot12, ...
                  control_tp1_top12, ...
                  cpg_k0_values_from_tile_index] = ...
@@ -237,12 +239,12 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
                                  match_statistics, ...
                                  cpg_k0_values_from_tile_index, ...
                                  field_corrected_cpg_ij0s, ...
-                                 Fxt, ...
-                                 Fyt, ...
-                                 Fzt, ...
-                                 Fxtp1, ...
-                                 Fytp1, ...
-                                 Fztp1, ...
+                                 Fx, ...
+                                 Fy, ...
+                                 Fz, ...
+                                 Fx_neighbor, ...
+                                 Fy_neighbor, ...
+                                 Fz_neighbor, ...
                                  local_default_cpg_k0_values) ;
 
                 targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
@@ -300,5 +302,5 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
     vecfield.origin = origin;
     vecfield.sz = sz;
     vecfield.time = datestr(now);
-    vecfield.theselayers = theselayers;
+    vecfield.theselayers = tile_k_from_run_layer_index;
 end
