@@ -168,6 +168,10 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
             field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
             field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ;
 
+%             if tile_index == 2137 || neighbor_tile_index == 2137 ,
+%                keyboard
+%             end             
+            
             [nooptim_this_tile, ...
              control_t_bot12, ...
              control_tp1_top12, ...
@@ -213,9 +217,14 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
         
         for tile_index = idxinlayer ,  % layer t
             neighbor_tile_index = tileneighbors(tile_index,7) ;
+            
+%             if tile_index == 2137 || neighbor_tile_index == 2137 ,
+%                keyboard
+%             end            
+
             if nooptim(tile_index) ,
                 is_query =(tile_index==queryinds) ;
-                default_cpg_k0_values = round(median(cpg_k0_values_from_tile_index(:,anchorinds(IDX{is_query})),2))' ;
+                local_default_cpg_k0_values = round(median(cpg_k0_values_from_tile_index(:,anchorinds(IDX{is_query})),2))' ;
                 
                 [nooptim(tile_index), ...
                  control_t_bot12, ...
@@ -234,7 +243,7 @@ function vecfield = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,
                                  Fxtp1, ...
                                  Fytp1, ...
                                  Fztp1, ...
-                                 default_cpg_k0_values) ;
+                                 local_default_cpg_k0_values) ;
 
                 targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
                 targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = control_tp1_top12 ;
