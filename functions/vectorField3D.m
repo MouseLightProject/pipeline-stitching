@@ -137,7 +137,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     for run_layer_index = 1 : run_layer_count ,
         % Sort out which tiles are in this layer
         tile_k = tile_k_from_run_layer_index(run_layer_index) ;
-        fprintf('    Layer %d of %d, at tile k/z of %d\n', run_lyaer_index, run_layer_count, tile_k);
+        fprintf('    Layer %d of %d, at tile k/z of %d\n', run_layer_index, run_layer_count, tile_k);
         is_in_this_layer_from_tile_index = (tile_k_from_tile_index'==tile_k) ;
         tile_index_from_tile_within_layer_index = find(is_in_this_layer_from_tile_index);
         if isempty(tile_index_from_tile_within_layer_index) ,
