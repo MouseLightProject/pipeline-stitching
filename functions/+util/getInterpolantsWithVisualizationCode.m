@@ -10,7 +10,6 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
     % Break out parameters
     do_visualize = params.viz;
     tile_shape_ijk = params.imagesize ;
-    expansion_ratio = params.expensionratio ;
     if isfield(params, 'order') ,
         order = params.order ;
     else
@@ -92,41 +91,56 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
         return
     end
     
-    % Identify outliers
+    %
+    % eliminate outliers
+    %
+    
+    % build kd-tree based on xy location
     K = min(20, round(sqrt(layer_match_count))) ;
     layer_matches_xy = layer_matches_xyz(:,1:2) ;
     IDX = knnsearch(layer_matches_xy, layer_matches_xy, 'K', K) ;
-    diffXY = layer_matches_xyz(:,1:2)-neighbor_layer_matches_xyz(:,1:2) ;
-    normdiffXY = normr(diffXY) ;
-    % interpolate vector from nearest K samples
-    bins = [linspace(-1,1,21)-.05 1.05] ;
-    bins2 = [linspace(0.1,1,10)-.05 1.05] ;
-    st = zeros(size(diffXY,1),4) ;
-    for idx = 1 : size(diffXY,1) ,
-        dists = [0;sqrt(sum((ones(size(IDX,2)-1,1)*layer_matches_xyz(idx,1:2)-layer_matches_xyz(IDX(idx,2:end),1:2)).^2,2))] ;  % can be used as weighting
-        innprod = [1 normdiffXY(idx,:)*normdiffXY(IDX(idx,2:end),:)'] ;
-        % majority binning
-        % theta
-        [~,idxmaxtheta] = max(histc(innprod(dists>0 & dists<1e6),bins)) ;
-        st(idx,2) = bins(idxmaxtheta) + 0.05 ;
+%     if 1
+        diffXY = layer_matches_xyz(:,1:2)-neighbor_layer_matches_xyz(:,1:2);
+        normdiffXY = normr(diffXY);
+        % interpolate vector from nearest K samples
+        bins = [linspace(-1,1,21)-.05 1.05];
+        bins2 = [linspace(0.1,1,10)-.05 1.05];
+        st = zeros(size(diffXY,1),4);
+        for idx = 1:size(diffXY,1)
+            dists = [0;sqrt(sum((ones(size(IDX,2)-1,1)*layer_matches_xyz(idx,1:2)-layer_matches_xyz(IDX(idx,2:end),1:2)).^2,2))]; % can be used as weighting
+            if 1
+                innprod = [1 normdiffXY(idx,:)*normdiffXY(IDX(idx,2:end),:)'];
+            else
+                weights = exp(-dists/std(dists(dists>0 & dists<1e6)));weights = weights/max(weights);
+                innprod = [normdiffXY(idx,:)*normdiffXY(IDX(idx,:),:)'*diag(weights)];
+            end
+            % majority binning
+            % theta
+            [~,idxmaxtheta] = max(histc(innprod(dists>0 & dists<1e6),bins));
+            st(idx,2) = bins(idxmaxtheta)+.05;
 
-        dV = ones(size(IDX(idx,:),2),1)*diffXY(IDX(idx,1),:)-diffXY(IDX(idx,1:end),:) ;
-        mags = sqrt(sum(dV.^2,2)) ;
-        mags = exp(-mags/norm(diffXY(IDX(idx,1),:))) ;
-        mags = mags/max(mags) ;
-        xx = flipud(histc(mags(dists>0 & dists<1e6), bins2)) ;
-        [~,idxmaxdist] = max(xx); % Max-likely
-        idxmaxdist = length(xx)+1-idxmaxdist;
-        aa = histc(mags(dists>0 & dists<1e6), bins2) ;  % Max-likely
+            dV = ones(size(IDX(idx,:),2),1)*diffXY(IDX(idx,1),:)-diffXY(IDX(idx,1:end),:);
+            mags = sqrt(sum(dV.^2,2));
+            mags = exp(-mags/norm(diffXY(IDX(idx,1),:)));
+            mags = mags/max(mags);
+            xx=flipud(histc(mags(dists>0 & dists<1e6),bins2));
+            [tr,idxmaxdist] = max(xx); % Max-likely
+            idxmaxdist = length(xx)+1-idxmaxdist;
+            [aa,bb] = histc(mags(dists>0 & dists<1e6),bins2); % Max-likely
 
-        st(idx,3) = bins2(idxmaxdist) + 0.05 ;
-        st(idx,4) = (bins2-.05)*aa(:)/sum(aa) ;
-    end
-    outliers1 = st(:,2)<.8 ;
-    outliers2 = st(:,3)<.5 & st(:,4)<.5 ;
-    outliers = outliers1 | outliers2 ;
+            st(idx,3) = bins2(idxmaxdist)+.05;
+            st(idx,4) = (bins2-.05)*aa(:)/sum(aa);
+        end
+        outliers1 = st(:,2)<.8;
+        outliers2 = st(:,3)<.5 & st(:,4)<.5;
+        outliers = outliers1|outliers2;
+        inliers = ~outliers;
+%     else
+%         diffZ = layer_matches_xyz(:,3)-neighbor_layer_matches_xyz(:,3);diffZ=diffZ(IDX);
+%         % compare first to rest
+%         inliers = abs(diffZ(:,1))<=2e3 | abs(diffZ(:,1)) <= 3*abs(median(diffZ(:,2:end),2));
+%     end
     
-    % Visualize the matches (inliers and outliers)
     if do_visualize
         figure(35), cla
         hold on
@@ -141,12 +155,9 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
         drawnow
     end
     
-    % Discard outliers
-    inliers = ~outliers ;
     inlier_layer_matches_xyz = layer_matches_xyz(inliers,:);
     inlier_neighbor_layer_matches_xyz = neighbor_layer_matches_xyz(inliers,:);
     
-    % Visualize the inliers
     if do_visualize
         figure(33), cla
         hold on
@@ -163,21 +174,16 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
         %         plot3(XYZ_tp1(16248,1),XYZ_tp1(16248,2),XYZ_tp1(16248,3),'m*') % layer tp1
     end
     
-    % Compute the shifts implied by the matches, and the how much each tile will
-    % account for the shift
-    dxyz = inlier_layer_matches_xyz - inlier_neighbor_layer_matches_xyz ;
-    neighbor_weight = expansion_ratio/(1+expansion_ratio) ;  % expansion_ratio is usually one, so this is usually 1/2
-    tile_weight = 1 - neighbor_weight ;
-    tile_dxyz = -tile_weight * dxyz ;
-    neighbor_dxyz = neighbor_weight * dxyz ;
+    vecdif = inlier_layer_matches_xyz - inlier_neighbor_layer_matches_xyz ;
+    rt = params.expensionratio/(1+params.expensionratio) ;
     
     % Get an interpolation function for x, y, and z for this layer
-    Fx = scatteredInterpolant(inlier_layer_matches_xyz, tile_dxyz(:,1), 'linear', 'nearest') ;
-    Fy = scatteredInterpolant(inlier_layer_matches_xyz, tile_dxyz(:,2), 'linear', 'nearest') ;
-    Fz = scatteredInterpolant(inlier_layer_matches_xyz, tile_dxyz(:,3), 'linear', 'nearest') ;
+    Fx = scatteredInterpolant(inlier_layer_matches_xyz, -vecdif(:,1)*(1-rt), 'linear', 'nearest') ;
+    Fy = scatteredInterpolant(inlier_layer_matches_xyz, -vecdif(:,2)*(1-rt), 'linear', 'nearest') ;
+    Fz = scatteredInterpolant(inlier_layer_matches_xyz, -vecdif(:,3)*(1-rt), 'linear', 'nearest') ;
     
     % Get an interpolation function for x, y, and z for the z+1 layer
-    Fx_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, neighbor_dxyz(:,1), 'linear', 'nearest') ;
-    Fy_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, neighbor_dxyz(:,2), 'linear', 'nearest') ;
-    Fz_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, neighbor_dxyz(:,3), 'linear', 'nearest') ;
+    Fx_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, vecdif(:,1)*rt, 'linear', 'nearest') ;
+    Fy_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, vecdif(:,2)*rt, 'linear', 'nearest') ;
+    Fz_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, vecdif(:,3)*rt, 'linear', 'nearest') ;
 end

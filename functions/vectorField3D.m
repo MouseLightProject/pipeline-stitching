@@ -75,7 +75,8 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     for tile_index = 1 : tile_count ,
         % field curvature
         this_tile_curve_model = curvemodel(:,:,tile_index) ;
-        field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;  % 25 x 2, one-based ij coordinates, but non-integral
+        field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;  
+          % 25 x 2, one-based ij coordinates, but non-integral
         field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ; % 25 x 2, zero-based ij coordinates, but non-integral
 
         % Get the affine transform
@@ -146,7 +147,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         
         % get interpolants based on paired descriptors
         [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, XYZ_original, XYZ_neighbor_original, outliers] =...
-            util.getInterpolants(is_in_this_layer_from_tile_index, regpts, affine_transform_from_tile_index, params, curvemodel, do_apply_FC) ;
+            util.getInterpolants(tile_index_from_tile_within_layer_index, regpts, affine_transform_from_tile_index, tile_ij1s, params, curvemodel, do_apply_FC) ;
 
         % Show some debugging output if called for
         if params.debug ,
@@ -160,8 +161,8 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         end
         
         % Print the number of matches in this layer
-        match_count = size(Fx.Points,1) ;
-        fprintf('    Layer with k/z = %d total matches: %d\n', match_count);
+        layer_used_match_count = size(Fx.Points,1) ;
+        fprintf('    Layer with k/z = %d total used matches: %d\n', layer_used_match_count) ;
         
         for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
             neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile

@@ -72,7 +72,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         directions = 'Z';
         checkversion = 1; % 1: loads the version with "checkversion" extension and overwrites existing match if there are more matched points
         % load finished tile matches. find badly matched or missing tile pairs
-        [regpts,featmap] = loadMatchedFeatures(scopeloc,matchfolder,directions,checkversion);    
+        [regpts, featmap] = loadMatchedFeatures(scopeloc, matchfolder, directions, checkversion) ;    
         save(regpts_file_path, '-v7.3', 'regpts', 'featmap')
     end
     % if ~exist(fullfile(stitching_output_folder_path,'regpts_1stiter.mat'),'file') % faster to make a copy
