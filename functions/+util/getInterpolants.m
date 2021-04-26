@@ -1,4 +1,4 @@
-function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, neighbor_layer_matches_xyz, outliers] = ...
+function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_match_index, next_layer_xyz_from_match_index, is_outlier_from_match_index] = ...
     getInterpolants(tile_index_from_tile_within_layer_index, ...
                     regpts, ...
                     affine_transform_from_tile_index, ...
@@ -17,8 +17,193 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
         order = 1 ;
     end
 
-    % Collect up all the matched landmarks from this layer and the z+1 layer    
-    tiles_with_enough_matches_count = 0 ;
+    % Collect up all the matched landmarks from this layer and the z+1 layer
+    [layer_xyz_from_match_index, next_layer_xyz_from_match_index] = ...
+        collect_layer_matches(tile_index_from_tile_within_layer_index, ...
+                              regpts, ...
+                              curve_model, ...
+                              order, ...
+                              affine_transform_from_tile_index, ...
+                              tile_shape_ijk, ...
+                              tile_ij1s, ...
+                              do_apply_field_correction) ;
+    
+    % If there are no tiles with enough matches in the whole layer, just exit now, returning everything
+    % empty
+    match_count = size(layer_xyz_from_match_index, 1) ;
+    if match_count == 0 , 
+        Fx = [] ;
+        Fy = [] ;
+        Fz = [] ;
+        Fx_neighbor = [] ;
+        Fy_neighbor = [] ;
+        Fz_neighbor = [] ;
+        layer_xyz_from_match_index = [] ;
+        next_layer_xyz_from_match_index = [] ;
+        is_outlier_from_match_index = [] ;            
+        return
+    end
+    
+    % Identify outliers
+    % Do this by computing a set of features for each match, all of which we'd like
+    % to be high (close to one).  If enough of them are much less than one, we
+    % consider the match to be an outlier.
+    K = min(20, round(sqrt(match_count))) ;
+    layer_xy_from_match_index = layer_xyz_from_match_index(:,1:2) ;
+    next_layer_xy_from_match_index = next_layer_xyz_from_match_index(:,1:2) ;
+    IDX = knnsearch(layer_xy_from_match_index, layer_xy_from_match_index, 'K', K) ;
+    
+    % Do a sanity check, b/c the code used to use IDX(match_index,1) in several
+    % places where it seems match_index would do...
+    if ~isequal(IDX(:,1), (1:match_count)') ,
+        error('Something has gone horribly wrong: IDX(:,1) ~= (1:match_count)''') ;
+    end            
+    
+    dxy_from_match_index = layer_xy_from_match_index - next_layer_xy_from_match_index ;  
+      % All the "dxy" variables are differences in the matched points between the two
+      % layers, relative to the next layer
+    dxy_hat_from_match_index = normr(dxy_from_match_index) ;
+    % interpolate vector from nearest K samples
+    similarity_bin_edges = -1.05 : 0.1 : 1.05 ;
+    similarity_bin_centers = (similarity_bin_edges(1:end-1) + similarity_bin_edges(2:end))/2 ;
+    positive_bin_edges = 0.05 : 0.1 : 1.05 ;
+    positive_bin_centers = (positive_bin_edges(1:end-1) + positive_bin_edges(2:end))/2 ;
+    modal_similarity_from_match_index = zeros(match_count,1) ;
+    st3 = zeros(match_count,1) ;
+    st4 = zeros(match_count,1) ;    
+    for match_index = 1 : match_count ,
+        % Get a bunch of info about this match, and nearby matches
+        layer_xy = layer_xy_from_match_index(match_index,:) ;
+        match_index_from_nearby_match_index = IDX(match_index,:) ;  % includes this_match_xy in row 1
+        layer_xy_from_nearby_match_index = layer_xy_from_match_index(match_index_from_nearby_match_index, :) ;
+        dxy = dxy_from_match_index(match_index,:) ;
+        dxy_from_nearby_match_index = dxy_from_match_index(match_index_from_nearby_match_index,:) ;
+        dxy_hat = dxy_hat_from_match_index(match_index,:) ;
+        dxy_hat_from_nearby_match_index = dxy_hat_from_match_index(match_index_from_nearby_match_index,:) ;
+
+        % Make a filter for which ones are at an acceptable distance
+        xy_distance_from_nearby_match_index = vecnorm(layer_xy_from_nearby_match_index - layer_xy, 2, 2) ;  % 1 x nearby_match_count
+            % distance in xy from each nearby match to the current match, all within the
+            % current layer
+        is_at_good_distance = ( 0<xy_distance_from_nearby_match_index & xy_distance_from_nearby_match_index<1e6 ) ;  % 1e6 is in nm
+        is_at_good_distance(1) = false ;  % make double-sure match_index is not included
+                
+        % Find the approximate mode in the distribution of
+        % cosine similarity between this match and nearby matches.
+        similarity_from_nearby_match_index = dxy_hat * dxy_hat_from_nearby_match_index' ;  
+            % cosine similarity in x-y plane from each nearby match to the current match,
+            % all within the current layer
+        % majority binning
+        % theta
+%         modal_similarity_new = ...
+%             mode_after_binning(similarity_from_nearby_match_index(is_at_good_distance), ...
+%                                similarity_bin_edges, ...
+%                                similarity_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
+        similarity_counts_from_bin_index = histc(similarity_from_nearby_match_index(is_at_good_distance),similarity_bin_edges) ; %#ok<HISTC>
+        [~,idxmaxtheta] = max(similarity_counts_from_bin_index) ;
+        modal_similarity = similarity_bin_centers(idxmaxtheta) ;  % "mode similarity", akin to "mean similarity" or "median similarity"
+        modal_similarity_from_match_index(match_index) = modal_similarity ;
+        
+%         if modal_similarity ~= modal_similarity_new ,
+%             error('modal similarity!') ;
+%         end
+
+        relative_dxy_from_nearby_match_index = dxy_from_nearby_match_index - dxy ;
+        relative_dxy_length_from_nearby_match_index = vecnorm(relative_dxy_from_nearby_match_index, 2, 2) ; 
+             % 2nd arg specifies euclidian norm, 1 x nearby_match_count, 1st element always 0
+        mags = exp(-relative_dxy_length_from_nearby_match_index/norm(dxy)) ;  % 1 x nearby_match_count, 1st element always 1
+            % exp(-x) converts a distance on [0,inf) to a similarity measure on (0,1]
+%         this_st3_new = ...
+%             mode_after_binning_favoring_high(mags(is_at_good_distance), ...
+%                                              positive_bin_edges, ...
+%                                              positive_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
+        counts_from_positive_bin_index = histc(mags(is_at_good_distance),positive_bin_edges) ;  %#ok<HISTC>
+        xx = flipud(counts_from_positive_bin_index) ;  % this flip is so that if two bins are tied, we pick the higher-index one
+        [~,idxmaxdist] = max(xx);   % Max-likely
+        idxmaxdist = length(xx) + 1 - idxmaxdist ;
+        this_st3 = positive_bin_edges(idxmaxdist) + 0.05 ;
+        %this_st3 = positive_bin_centers(idxmaxdist) ;
+        st3(match_index) = this_st3 ;
+
+%         if this_st3_new ~= this_st3 ,
+%             error('st3!') ;
+%         end
+        
+        aa = histc(mags(is_at_good_distance), positive_bin_edges) ;  %#ok<HISTC>  % Max-likely
+        this_st4 = (positive_bin_edges-.05)*aa(:)/sum(aa) ;
+        st4(match_index) = this_st4 ;
+    end
+    outliers1 = modal_similarity_from_match_index < .8 ;
+    outliers2 = st3<.5 & st4<.5 ;
+    is_outlier_from_match_index = outliers1 | outliers2 ;
+    
+    % Visualize the matches (inliers and outliers)
+    if do_visualize
+        figure(35), cla
+        hold on
+        plot3(layer_xyz_from_match_index(:,1),layer_xyz_from_match_index(:,2),layer_xyz_from_match_index(:,3),'r.') % layer t
+        plot3(next_layer_xyz_from_match_index(:,1),next_layer_xyz_from_match_index(:,2),next_layer_xyz_from_match_index(:,3),'k.') % layer tp1
+        %text(XYZ_t(outliers,1),XYZ_t(outliers,2),num2str(st(outliers,2:4)))
+        myplot3(layer_xyz_from_match_index(is_outlier_from_match_index,:),'md') % layer t
+        myplot3(next_layer_xyz_from_match_index(is_outlier_from_match_index,:),'gd') % layer t
+        %plot3(XYZ_t(IDX(idx,1),1),XYZ_t(IDX(idx,1),2),XYZ_t(IDX(idx,1),3),'r*') % layer t
+        %plot3(XYZ_t(IDX(idx,2:end),1),XYZ_t(IDX(idx,2:end),2),XYZ_t(IDX(idx,2:end),3),'bo') % layer t
+        set(gca,'Ydir','reverse')
+        drawnow
+    end
+    
+    % Discard outliers
+    is_inlier_from_match_index = ~is_outlier_from_match_index ;
+    layer_xyz_from_inlier_match_index = layer_xyz_from_match_index(is_inlier_from_match_index,:) ;
+    next_layer_xyz_from_inlier_match_index = next_layer_xyz_from_match_index(is_inlier_from_match_index,:) ;
+    
+    % Visualize the inliers
+    if do_visualize
+        figure(33), cla
+        hold on
+        plot3(layer_xyz_from_inlier_match_index(:,1),layer_xyz_from_inlier_match_index(:,2),layer_xyz_from_inlier_match_index(:,3),'k.') % layer t
+        plot3(next_layer_xyz_from_inlier_match_index(:,1),next_layer_xyz_from_inlier_match_index(:,2),next_layer_xyz_from_inlier_match_index(:,3),'r.') % layer tp1
+        myplot3([tile_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,tile_index)','g.') % layer t
+        myplot3([neighbor_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,neighbor_tile_index)','m.') % layer tp1
+        set(gca,'Zdir','reverse');
+        legend('layer t','layer t+1')
+        set(gca,'Ydir','reverse')
+        %         plot3(XYZ_t(inliers,1),XYZ_t(inliers,2),XYZ_t(inliers,3),'go') % layer t
+        %         plot3(XYZ_tp1(inliers,1),XYZ_tp1(inliers,2),XYZ_tp1(inliers,3),'mo') % layer tp1
+        %         plot3(XYZ_t(16248,1),XYZ_t(16248,2),XYZ_t(16248,3),'g*') % layer t
+        %         plot3(XYZ_tp1(16248,1),XYZ_tp1(16248,2),XYZ_tp1(16248,3),'m*') % layer tp1
+    end
+    
+    % Compute the shifts implied by the matches, and the how much each tile will
+    % account for the shift
+    dxyz = layer_xyz_from_inlier_match_index - next_layer_xyz_from_inlier_match_index ;
+    neighbor_weight = expansion_ratio/(1+expansion_ratio) ;  % expansion_ratio is usually one, so this is usually 1/2
+    tile_weight = 1 - neighbor_weight ;
+    tile_dxyz = -tile_weight * dxyz ;
+    neighbor_dxyz = neighbor_weight * dxyz ;
+    
+    % Get an interpolation function for x, y, and z for this layer
+    Fx = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,1), 'linear', 'nearest') ;
+    Fy = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,2), 'linear', 'nearest') ;
+    Fz = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,3), 'linear', 'nearest') ;
+    
+    % Get an interpolation function for x, y, and z for the z+1 layer
+    Fx_neighbor = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,1), 'linear', 'nearest') ;
+    Fy_neighbor = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,2), 'linear', 'nearest') ;
+    Fz_neighbor = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,3), 'linear', 'nearest') ;
+end
+
+
+
+function [layer_matches_xyz, neighbor_layer_matches_xyz] = ...
+        collect_layer_matches(tile_index_from_tile_within_layer_index, ...
+                              regpts, ...
+                              curve_model, ...
+                              order, ...
+                              affine_transform_from_tile_index, ...
+                              tile_shape_ijk, ...
+                              tile_ij1s, ...
+                              do_apply_field_correction)
     tile_within_layer_count = length(tile_index_from_tile_within_layer_index) ;
     tile_matches_xyz_from_tile_within_layer_index = cell(1, tile_within_layer_count) ;
     neighbor_matches_xyz_from_tile_within_layer_index = cell(1, tile_within_layer_count) ;
@@ -29,15 +214,13 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
         this_tile_regpts = regpts{tile_index} ;
         raw_tile_matches_ijk0 = this_tile_regpts.X ;
         raw_neighbor_matches_ijk0 = this_tile_regpts.Y ;
-        match_count = size(raw_tile_matches_ijk0, 1) ;
+        tile_match_count = size(raw_tile_matches_ijk0, 1) ;
         
         % If not enough matches, bail on this tile
-        if match_count < 250 ,
+        if tile_match_count < 250 ,
             tile_matches_xyz_from_tile_within_layer_index{tile_within_layer_index} = zeros(0,3) ;
             neighbor_matches_xyz_from_tile_within_layer_index{tile_within_layer_index} = zeros(0,3) ;            
         else
-            tiles_with_enough_matches_count = tiles_with_enough_matches_count + 1 ;
-
             % Get the tile index of the z+1 neighbor tile
             tile_index_from_neighbor_index = this_tile_regpts.neigs ;
             self_tile_index = tile_index_from_neighbor_index(1) ;
@@ -74,110 +257,37 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_matches_xyz, 
 
     % Collect all the matches in the layer, and the z+1 layer
     layer_matches_xyz = cat(1,tile_matches_xyz_from_tile_within_layer_index{:}) ;
-    neighbor_layer_matches_xyz = cat(1,neighbor_matches_xyz_from_tile_within_layer_index{:}) ;
-    
-    % If there are no tiles with enough matches in the whole layer, just exit now, returning everything
-    % empty
-    layer_match_count = size(layer_matches_xyz, 1) ;
-    if layer_match_count == 0 , 
-        Fx = [] ;
-        Fy = [] ;
-        Fz = [] ;
-        Fx_neighbor = [] ;
-        Fy_neighbor = [] ;
-        Fz_neighbor = [] ;
-        layer_matches_xyz = [] ;
-        neighbor_layer_matches_xyz = [] ;
-        outliers = [] ;            
-        return
-    end
-    
-    % Identify outliers
-    K = min(20, round(sqrt(layer_match_count))) ;
-    layer_matches_xy = layer_matches_xyz(:,1:2) ;
-    IDX = knnsearch(layer_matches_xy, layer_matches_xy, 'K', K) ;
-    diffXY = layer_matches_xyz(:,1:2)-neighbor_layer_matches_xyz(:,1:2) ;
-    normdiffXY = normr(diffXY) ;
-    % interpolate vector from nearest K samples
-    bins = [linspace(-1,1,21)-.05 1.05] ;
-    bins2 = [linspace(0.1,1,10)-.05 1.05] ;
-    st = zeros(size(diffXY,1),4) ;
-    for idx = 1 : size(diffXY,1) ,
-        dists = [0;sqrt(sum((ones(size(IDX,2)-1,1)*layer_matches_xyz(idx,1:2)-layer_matches_xyz(IDX(idx,2:end),1:2)).^2,2))] ;  % can be used as weighting
-        innprod = [1 normdiffXY(idx,:)*normdiffXY(IDX(idx,2:end),:)'] ;
-        % majority binning
-        % theta
-        [~,idxmaxtheta] = max(histc(innprod(dists>0 & dists<1e6),bins)) ;
-        st(idx,2) = bins(idxmaxtheta) + 0.05 ;
+    neighbor_layer_matches_xyz = cat(1,neighbor_matches_xyz_from_tile_within_layer_index{:}) ;    
+end
 
-        dV = ones(size(IDX(idx,:),2),1)*diffXY(IDX(idx,1),:)-diffXY(IDX(idx,1:end),:) ;
-        mags = sqrt(sum(dV.^2,2)) ;
-        mags = exp(-mags/norm(diffXY(IDX(idx,1),:))) ;
-        mags = mags/max(mags) ;
-        xx = flipud(histc(mags(dists>0 & dists<1e6), bins2)) ;
-        [~,idxmaxdist] = max(xx); % Max-likely
-        idxmaxdist = length(xx)+1-idxmaxdist;
-        aa = histc(mags(dists>0 & dists<1e6), bins2) ;  % Max-likely
 
-        st(idx,3) = bins2(idxmaxdist) + 0.05 ;
-        st(idx,4) = (bins2-.05)*aa(:)/sum(aa) ;
-    end
-    outliers1 = st(:,2)<.8 ;
-    outliers2 = st(:,3)<.5 & st(:,4)<.5 ;
-    outliers = outliers1 | outliers2 ;
-    
-    % Visualize the matches (inliers and outliers)
-    if do_visualize
-        figure(35), cla
-        hold on
-        plot3(layer_matches_xyz(:,1),layer_matches_xyz(:,2),layer_matches_xyz(:,3),'r.') % layer t
-        plot3(neighbor_layer_matches_xyz(:,1),neighbor_layer_matches_xyz(:,2),neighbor_layer_matches_xyz(:,3),'k.') % layer tp1
-        %text(XYZ_t(outliers,1),XYZ_t(outliers,2),num2str(st(outliers,2:4)))
-        myplot3(layer_matches_xyz(outliers,:),'md') % layer t
-        myplot3(neighbor_layer_matches_xyz(outliers,:),'gd') % layer t
-        %plot3(XYZ_t(IDX(idx,1),1),XYZ_t(IDX(idx,1),2),XYZ_t(IDX(idx,1),3),'r*') % layer t
-        %plot3(XYZ_t(IDX(idx,2:end),1),XYZ_t(IDX(idx,2:end),2),XYZ_t(IDX(idx,2:end),3),'bo') % layer t
-        set(gca,'Ydir','reverse')
-        drawnow
-    end
-    
-    % Discard outliers
-    inliers = ~outliers ;
-    inlier_layer_matches_xyz = layer_matches_xyz(inliers,:);
-    inlier_neighbor_layer_matches_xyz = neighbor_layer_matches_xyz(inliers,:);
-    
-    % Visualize the inliers
-    if do_visualize
-        figure(33), cla
-        hold on
-        plot3(inlier_layer_matches_xyz(:,1),inlier_layer_matches_xyz(:,2),inlier_layer_matches_xyz(:,3),'k.') % layer t
-        plot3(inlier_neighbor_layer_matches_xyz(:,1),inlier_neighbor_layer_matches_xyz(:,2),inlier_neighbor_layer_matches_xyz(:,3),'r.') % layer tp1
-        myplot3([tile_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,tile_index)','g.') % layer t
-        myplot3([neighbor_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,neighbor_tile_index)','m.') % layer tp1
-        set(gca,'Zdir','reverse');
-        legend('layer t','layer t+1')
-        set(gca,'Ydir','reverse')
-        %         plot3(XYZ_t(inliers,1),XYZ_t(inliers,2),XYZ_t(inliers,3),'go') % layer t
-        %         plot3(XYZ_tp1(inliers,1),XYZ_tp1(inliers,2),XYZ_tp1(inliers,3),'mo') % layer tp1
-        %         plot3(XYZ_t(16248,1),XYZ_t(16248,2),XYZ_t(16248,3),'g*') % layer t
-        %         plot3(XYZ_tp1(16248,1),XYZ_tp1(16248,2),XYZ_tp1(16248,3),'m*') % layer tp1
-    end
-    
-    % Compute the shifts implied by the matches, and the how much each tile will
-    % account for the shift
-    dxyz = inlier_layer_matches_xyz - inlier_neighbor_layer_matches_xyz ;
-    neighbor_weight = expansion_ratio/(1+expansion_ratio) ;  % expansion_ratio is usually one, so this is usually 1/2
-    tile_weight = 1 - neighbor_weight ;
-    tile_dxyz = -tile_weight * dxyz ;
-    neighbor_dxyz = neighbor_weight * dxyz ;
-    
-    % Get an interpolation function for x, y, and z for this layer
-    Fx = scatteredInterpolant(inlier_layer_matches_xyz, tile_dxyz(:,1), 'linear', 'nearest') ;
-    Fy = scatteredInterpolant(inlier_layer_matches_xyz, tile_dxyz(:,2), 'linear', 'nearest') ;
-    Fz = scatteredInterpolant(inlier_layer_matches_xyz, tile_dxyz(:,3), 'linear', 'nearest') ;
-    
-    % Get an interpolation function for x, y, and z for the z+1 layer
-    Fx_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, neighbor_dxyz(:,1), 'linear', 'nearest') ;
-    Fy_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, neighbor_dxyz(:,2), 'linear', 'nearest') ;
-    Fz_neighbor = scatteredInterpolant(inlier_neighbor_layer_matches_xyz, neighbor_dxyz(:,3), 'linear', 'nearest') ;
+
+function result = mode_after_binning(value_from_index, bin_edges, bin_centers)
+    % Find the approximate mode of a set of data by making a histogram and returning
+    % the bin center of the bin with the highest count.
+    % Typically, bin_centers will be pre-computed according to
+    %   bin_centers = ( bin_edges(1:end-1) + bin_edges(2:end) ) / 2
+    % In any case, bin_edges should be one element longer than bin_centers.
+    counts_from_bin_index = histc(value_from_index, bin_edges) ;  %#ok<HISTC>
+    counts_from_bin_index = counts_from_bin_index(1:end-1) ;  % drop the last "bin", since it's the zero-width one
+    [~,modal_bin_index] = max(counts_from_bin_index) ;  % defaults to the lowest argmax if there are ties
+    result = bin_centers(modal_bin_index) ;
+end
+
+
+
+function result = mode_after_binning_favoring_high(value_from_index, bin_edges, bin_centers)
+    % Find the approximate mode of a set of data by making a histogram and returning
+    % the bin center of the bin with the highest count.
+    % Typically, bin_centers will be pre-computed according to
+    %   bin_centers = ( bin_edges(1:end-1) + bin_edges(2:end) ) / 2
+    % In any case, bin_edges should be one element longer than bin_centers.
+    % If bins are tied for the mode, this version returns the center of the
+    % highest-value bin.
+    counts_from_bin_index = histc(value_from_index, bin_edges) ;  %#ok<HISTC>
+    counts_from_bin_index = counts_from_bin_index(1:end-1) ;  % drop the last "bin", since it's the zero-width one
+    max_counts = max(counts_from_bin_index) ;
+    is_mode_from_bin_index = (counts_from_bin_index==max_counts) ;
+    modal_bin_index = find(is_mode_from_bin_index, 1, 'last') ;  % pick the last one if there are multiples
+    result = bin_centers(modal_bin_index) ;
 end

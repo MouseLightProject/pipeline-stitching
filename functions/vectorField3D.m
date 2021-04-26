@@ -137,11 +137,11 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     for run_layer_index = 1 : run_layer_count ,
         % Sort out which tiles are in this layer
         tile_k = tile_k_from_run_layer_index(run_layer_index) ;
-        fprintf('    Layer %d of %d, at tile k/z of %d\n', run_layer_index, run_layer_count, tile_k);
+        fprintf('    Layer %d of %d, tile k/z = %d\n', run_layer_index, run_layer_count, tile_k);
         is_in_this_layer_from_tile_index = (tile_k_from_tile_index'==tile_k) ;
         tile_index_from_tile_within_layer_index = find(is_in_this_layer_from_tile_index);
         if isempty(tile_index_from_tile_within_layer_index) ,
-            fprintf('No tiles found in layer with tile k/z of %d!!\n', tile_k) ;
+            fprintf('No tiles found in layer with tile k/z = %d!!\n', tile_k) ;
             continue
         end
         
@@ -162,7 +162,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         
         % Print the number of matches in this layer
         layer_used_match_count = size(Fx.Points,1) ;
-        fprintf('    Layer with k/z = %d total used matches: %d\n', layer_used_match_count) ;
+        fprintf('    Layer with k/z = %d total used matches: %d\n', tile_k, layer_used_match_count) ;
         
         for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
             neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile
