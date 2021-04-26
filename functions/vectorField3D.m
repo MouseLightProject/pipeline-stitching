@@ -156,7 +156,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         
         % If too few matched landmarks, don't proceed with this layer
         if isempty(Fx) || size(Fx.Points,1) < 10 ,
-            fprintf('    MISSING SLICE @ layer with k/z = %d\n', tile_k) ;            
+            fprintf('    Layer with k/z = %d has too few matches to proceed.\n', tile_k) ;            
             continue
         end
         

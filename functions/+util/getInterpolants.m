@@ -95,13 +95,13 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
             % all within the current layer
         % majority binning
         % theta
-%         modal_similarity_new = ...
-%             mode_after_binning(similarity_from_nearby_match_index(is_at_good_distance), ...
-%                                similarity_bin_edges, ...
-%                                similarity_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
-        similarity_counts_from_bin_index = histc(similarity_from_nearby_match_index(is_at_good_distance),similarity_bin_edges) ; %#ok<HISTC>
-        [~,idxmaxtheta] = max(similarity_counts_from_bin_index) ;
-        modal_similarity = similarity_bin_centers(idxmaxtheta) ;  % "mode similarity", akin to "mean similarity" or "median similarity"
+        modal_similarity = ...
+            mode_after_binning(similarity_from_nearby_match_index(is_at_good_distance), ...
+                               similarity_bin_edges, ...
+                               similarity_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
+%         similarity_counts_from_bin_index = histc(similarity_from_nearby_match_index(is_at_good_distance),similarity_bin_edges) ; %#ok<HISTC>
+%         [~,idxmaxtheta] = max(similarity_counts_from_bin_index) ;
+%         modal_similarity = similarity_bin_centers(idxmaxtheta) ;  % "mode similarity", akin to "mean similarity" or "median similarity"
         modal_similarity_from_match_index(match_index) = modal_similarity ;
         
 %         if modal_similarity ~= modal_similarity_new ,
@@ -113,15 +113,15 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
              % 2nd arg specifies euclidian norm, 1 x nearby_match_count, 1st element always 0
         mags = exp(-relative_dxy_length_from_nearby_match_index/norm(dxy)) ;  % 1 x nearby_match_count, 1st element always 1
             % exp(-x) converts a distance on [0,inf) to a similarity measure on (0,1]
-%         this_st3_new = ...
-%             mode_after_binning_favoring_high(mags(is_at_good_distance), ...
-%                                              positive_bin_edges, ...
-%                                              positive_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
-        counts_from_positive_bin_index = histc(mags(is_at_good_distance),positive_bin_edges) ;  %#ok<HISTC>
-        xx = flipud(counts_from_positive_bin_index) ;  % this flip is so that if two bins are tied, we pick the higher-index one
-        [~,idxmaxdist] = max(xx);   % Max-likely
-        idxmaxdist = length(xx) + 1 - idxmaxdist ;
-        this_st3 = positive_bin_edges(idxmaxdist) + 0.05 ;
+        this_st3 = ...
+            mode_after_binning_favoring_high(mags(is_at_good_distance), ...
+                                             positive_bin_edges, ...
+                                             positive_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
+%         counts_from_positive_bin_index = histc(mags(is_at_good_distance),positive_bin_edges) ;  %#ok<HISTC>
+%         xx = flipud(counts_from_positive_bin_index) ;  % this flip is so that if two bins are tied, we pick the higher-index one
+%         [~,idxmaxdist] = max(xx);   % Max-likely
+%         idxmaxdist = length(xx) + 1 - idxmaxdist ;
+%         this_st3 = positive_bin_edges(idxmaxdist) + 0.05 ;
         %this_st3 = positive_bin_centers(idxmaxdist) ;
         st3(match_index) = this_st3 ;
 
