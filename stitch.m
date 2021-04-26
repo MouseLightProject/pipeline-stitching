@@ -158,7 +158,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
         vecfield3D = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,[]);
         save(vecfield3D_file_path, 'vecfield3D', 'params') ;
-        save(fullfile(stitching_output_folder_path,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params') ;
+        %save(fullfile(stitching_output_folder_path,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params') ;
     end
 
     % Finally, output the yaml file(s)
