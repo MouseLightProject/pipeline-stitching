@@ -1,4 +1,4 @@
-function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_match_index, next_layer_xyz_from_match_index, is_outlier_from_match_index] = ...
+function [Fx_layer, Fy_layer, Fz_layer, Fx_next_layer, Fy_next_layer, Fz_next_layer, layer_xyz_from_match_index, next_layer_xyz_from_match_index, is_outlier_from_match_index] = ...
     getInterpolants(tile_index_from_tile_within_layer_index, ...
                     regpts, ...
                     affine_transform_from_tile_index, ...
@@ -32,12 +32,12 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
     % empty
     match_count = size(layer_xyz_from_match_index, 1) ;
     if match_count == 0 , 
-        Fx = [] ;
-        Fy = [] ;
-        Fz = [] ;
-        Fx_neighbor = [] ;
-        Fy_neighbor = [] ;
-        Fz_neighbor = [] ;
+        Fx_layer = [] ;
+        Fy_layer = [] ;
+        Fz_layer = [] ;
+        Fx_next_layer = [] ;
+        Fy_next_layer = [] ;
+        Fz_next_layer = [] ;
         layer_xyz_from_match_index = [] ;
         next_layer_xyz_from_match_index = [] ;
         is_outlier_from_match_index = [] ;            
@@ -69,8 +69,8 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
     positive_bin_edges = -0.05 : 0.1 : 1.05 ;
     positive_bin_centers = (positive_bin_edges(1:end-1) + positive_bin_edges(2:end))/2 ;
     modal_similarity_from_match_index = zeros(match_count,1) ;
-    st3 = zeros(match_count,1) ;
-    st4 = zeros(match_count,1) ;    
+    modal_boltzman_similarity_from_match_index = zeros(match_count,1) ;
+    approximate_mean_boltzman_similarity_from_match_index = zeros(match_count,1) ;    
     for match_index = 1 : match_count ,
         % Get a bunch of info about this match, and nearby matches
         layer_xy = layer_xy_from_match_index(match_index,:) ;
@@ -93,49 +93,37 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
         similarity_from_nearby_match_index = dxy_hat * dxy_hat_from_nearby_match_index' ;  
             % cosine similarity in x-y plane from each nearby match to the current match,
             % all within the current layer
-        % majority binning
-        % theta
         modal_similarity = ...
             mode_after_binning(similarity_from_nearby_match_index(is_at_good_distance), ...
                                similarity_bin_edges, ...
                                similarity_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
-%         similarity_counts_from_bin_index = histc(similarity_from_nearby_match_index(is_at_good_distance),similarity_bin_edges) ; %#ok<HISTC>
-%         [~,idxmaxtheta] = max(similarity_counts_from_bin_index) ;
-%         modal_similarity = similarity_bin_centers(idxmaxtheta) ;  % "mode similarity", akin to "mean similarity" or "median similarity"
         modal_similarity_from_match_index(match_index) = modal_similarity ;
-        
-%         if modal_similarity ~= modal_similarity_new ,
-%             error('modal similarity!') ;
-%         end
 
+        % Compute how well this shift matches nearby shifts, in a different way
         relative_dxy_from_nearby_match_index = dxy_from_nearby_match_index - dxy ;
         relative_dxy_length_from_nearby_match_index = vecnorm(relative_dxy_from_nearby_match_index, 2, 2) ; 
              % 2nd arg specifies euclidian norm, 1 x nearby_match_count, 1st element always 0
-        mags = exp(-relative_dxy_length_from_nearby_match_index/norm(dxy)) ;  % 1 x nearby_match_count, 1st element always 1
+        boltzman_similarity_from_nearby_match_index = exp(-relative_dxy_length_from_nearby_match_index/norm(dxy)) ;  % 1 x nearby_match_count, 1st element always 1
             % exp(-x) converts a distance on [0,inf) to a similarity measure on (0,1]
-        this_st3 = ...
-            mode_after_binning_favoring_high(mags(is_at_good_distance), ...
+        modal_boltzman_similarity = ...
+            mode_after_binning_favoring_high(boltzman_similarity_from_nearby_match_index(is_at_good_distance), ...
                                              positive_bin_edges, ...
                                              positive_bin_centers) ;  % "mode similarity", akin to "mean similarity" or "median similarity"             
-%         counts_from_positive_bin_index = histc(mags(is_at_good_distance),positive_bin_edges) ;  %#ok<HISTC>
-%         xx = flipud(counts_from_positive_bin_index) ;  % this flip is so that if two bins are tied, we pick the higher-index one
-%         [~,idxmaxdist] = max(xx);   % Max-likely
-%         idxmaxdist = length(xx) + 1 - idxmaxdist ;
-%         this_st3 = positive_bin_edges(idxmaxdist) + 0.05 ;
-        %this_st3 = positive_bin_centers(idxmaxdist) ;
-        st3(match_index) = this_st3 ;
+        modal_boltzman_similarity_from_match_index(match_index) = modal_boltzman_similarity ;
 
-%         if this_st3_new ~= this_st3 ,
-%             error('st3!') ;
-%         end
-        
-        aa = histc(mags(is_at_good_distance), positive_bin_edges) ;  %#ok<HISTC>  % Max-likely
-        this_st4 = (positive_bin_edges-.05)*aa(:)/sum(aa) ;
-        st4(match_index) = this_st4 ;
+        boltzman_similarity_count_from_bin_index = ...
+            histc(boltzman_similarity_from_nearby_match_index(is_at_good_distance), positive_bin_edges) ;  %#ok<HISTC>  % Max-likely
+        approximate_mean_boltzman_similarity = (positive_bin_edges-.05)*boltzman_similarity_count_from_bin_index/sum(boltzman_similarity_count_from_bin_index) ;  
+          % seems like an approximation of the mean of boltzman_similarity_from_nearby_match_index(is_at_good_distance)
+          % but (positive_bin_edges-.05) should be (positive_bin_edges+.05).
+          % Or just do
+          % mean(boltzman_similarity_from_nearby_match_index(is_at_good_distance))...
+        approximate_mean_boltzman_similarity_from_match_index(match_index) = approximate_mean_boltzman_similarity ;
     end
-    outliers1 = modal_similarity_from_match_index < .8 ;
-    outliers2 = st3<.5 & st4<.5 ;
-    is_outlier_from_match_index = outliers1 | outliers2 ;
+    is_type_1_outlier_from_match_index = modal_similarity_from_match_index < .8 ;
+    is_type_2_outlier_from_match_index = modal_boltzman_similarity_from_match_index<.5 & approximate_mean_boltzman_similarity_from_match_index<.5 ;
+        % Not like type I and type II errors, just different reasons to exclude
+    is_outlier_from_match_index = is_type_1_outlier_from_match_index | is_type_2_outlier_from_match_index ;
     
     % Visualize the matches (inliers and outliers)
     if do_visualize
@@ -183,14 +171,14 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
     neighbor_dxyz = neighbor_weight * dxyz ;
     
     % Get an interpolation function for x, y, and z for this layer
-    Fx = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,1), 'linear', 'nearest') ;
-    Fy = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,2), 'linear', 'nearest') ;
-    Fz = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,3), 'linear', 'nearest') ;
+    Fx_layer = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,1), 'linear', 'nearest') ;
+    Fy_layer = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,2), 'linear', 'nearest') ;
+    Fz_layer = scatteredInterpolant(layer_xyz_from_inlier_match_index, tile_dxyz(:,3), 'linear', 'nearest') ;
     
     % Get an interpolation function for x, y, and z for the z+1 layer
-    Fx_neighbor = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,1), 'linear', 'nearest') ;
-    Fy_neighbor = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,2), 'linear', 'nearest') ;
-    Fz_neighbor = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,3), 'linear', 'nearest') ;
+    Fx_next_layer = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,1), 'linear', 'nearest') ;
+    Fy_next_layer = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,2), 'linear', 'nearest') ;
+    Fz_next_layer = scatteredInterpolant(next_layer_xyz_from_inlier_match_index, neighbor_dxyz(:,3), 'linear', 'nearest') ;
 end
 
 
