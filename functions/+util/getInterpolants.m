@@ -66,7 +66,7 @@ function [Fx, Fy, Fz, Fx_neighbor, Fy_neighbor, Fz_neighbor, layer_xyz_from_matc
     % interpolate vector from nearest K samples
     similarity_bin_edges = -1.05 : 0.1 : 1.05 ;
     similarity_bin_centers = (similarity_bin_edges(1:end-1) + similarity_bin_edges(2:end))/2 ;
-    positive_bin_edges = 0.05 : 0.1 : 1.05 ;
+    positive_bin_edges = -0.05 : 0.1 : 1.05 ;
     positive_bin_centers = (positive_bin_edges(1:end-1) + positive_bin_edges(2:end))/2 ;
     modal_similarity_from_match_index = zeros(match_count,1) ;
     st3 = zeros(match_count,1) ;
