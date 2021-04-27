@@ -15,6 +15,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
 
     % Build the neighbor index
     tileneighbors = buildNeighbor(scopeloc.gridix(:,1:3)) ;  % tile_count x 7, each row in [self -x -y +x +y -z +z] format
+    has_k_plus_1_tile_from_tile_index = ~isnan(tileneighbors(:,7)) ;
     
     % Determine the x-y grid used for the control points of the barymetric transform
     % in the per-tile space.
@@ -108,15 +109,17 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     cpg_k0_values_from_tile_index = repmat(default_cpg_k0_values', [1 tile_count]) ;
     
     % Collect some information about the point correspondences for each tile
+    has_zero_z_face_matches_from_tile_index = false(tile_count,1) ;
     match_statistics = nan(tile_count, 8) ;
     for tile_index = 1 : tile_count ,
         % pix stats
         this_tile_regpts = regpts{tile_index} ;
         match_coords = this_tile_regpts.X ;  % match_count x 3, the coordinates of matched landmarks in this tile
-        match_coords_in_neighbor = this_tile_regpts.Y ;  % match_count x 3, the coordinates of matched landmarks in the z+1 tile, in same order as layer
         if isempty(match_coords) ,
+            has_zero_z_face_matches_from_tile_index(tile_index) = true ;
             continue
         end
+        match_coords_in_neighbor = this_tile_regpts.Y ;  % match_count x 3, the coordinates of matched landmarks in the z+1 tile, in same order as layer
         match_z_in_both_tiles = [ match_coords(:,3) match_coords_in_neighbor(:,3) ] ;  % match_count x 2
         median_match_z_in_both_tiles = round(median(match_z_in_both_tiles,1)) ; % 1x2
         min_match_z_in_both_tiles = round(min(match_z_in_both_tiles,[],1)) ; % 1x2
@@ -132,7 +135,6 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     if nargin<6 || isempty(tile_k_from_run_layer_index) ,
         tile_k_from_run_layer_index = tile_k_from_layer_index(1:end-1)' ;  % a "run layer" is a layer that will actually be run
     end
-    do_run_nomatchoptim_from_tile_index = NaN(1,tile_count) ;
     run_layer_count = length(tile_k_from_run_layer_index) ;
     for run_layer_index = 1 : run_layer_count ,
         % Sort out which tiles are in this layer
@@ -164,74 +166,78 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         layer_used_match_count = size(Fx_layer.Points,1) ;
         fprintf('    Layer with k/z = %d total used matches: %d\n', tile_k, layer_used_match_count) ;
         
-        for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
-            neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile
-
-            this_tile_curve_model = curvemodel(:,:,tile_index) ;
-            field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
-            field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ;
-
-%             if tile_index == 2137 || neighbor_tile_index == 2137 ,
-%                keyboard
-%             end             
-            
-            [do_run_nomatchoptim, ...
-             control_t_bot12, ...
-             control_tp1_top12, ...
-             cpg_k0_values_from_tile_index] = ...
-                optimpertile(tile_index, ...
-                             params, ...
-                             tileneighbors, ...
-                             affine_transform_from_tile_index, ...
-                             match_statistics, ...
-                             cpg_k0_values_from_tile_index, ...
-                             field_corrected_cpg_ij0s, ...
-                             Fx_layer, ...
-                             Fy_layer, ...
-                             Fz_layer, ...
-                             Fx_next_layer, ...
-                             Fy_next_layer, ...
-                             Fz_next_layer, ...
-                             default_cpg_k0_values) ;
-            do_run_nomatchoptim_from_tile_index(tile_index) = do_run_nomatchoptim ;
-            if do_run_nomatchoptim ,
-                % do nothing, will call nomatchoptim() for this tile below
-            elseif isempty(control_tp1_top12) ,  % no below adjacent tile
-                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
-            else
-                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
-                targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = control_tp1_top12 ;
-            end
-
-        end
+        % Sort out which we'll run with whcih thing
+        do_run_nomatchoptim_from_tile_index = has_k_plus_1_tile_from_tile_index & has_zero_z_face_matches_from_tile_index ;
+        do_run_optimpertile_from_tile_index = ~do_run_nomatchoptim_from_tile_index ;        
         
-        anchorinds = tile_index_from_tile_within_layer_index(~do_run_nomatchoptim_from_tile_index(tile_index_from_tile_within_layer_index)) ;
+        % Go through all the tiles for which we have nonzero z-face matches, and optimize
+        % the CPG for each.  Then, compute the target values for the moved z-planes of the
+        % CPG, using the interpolators to try to make the matched pairs each go to the same point.
+        for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
+            do_run_optimpertile = do_run_optimpertile_from_tile_index(tile_index) ;
+            if do_run_optimpertile ,
+                neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile
+
+                this_tile_curve_model = curvemodel(:,:,tile_index) ;
+                field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
+                field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ;
+
+                [targets_at_cpg_k_indices_3_and_4, ...
+                 other_tile_targets_at_cpg_k_indices_1_and_2, ...
+                 new_cpg_k0_values, ...
+                 k_plus_1_tile_cpg_k0_values] = ...
+                    optimpertile(tile_index, ...
+                                 params, ...
+                                 neighbor_tile_index, ...
+                                 affine_transform_from_tile_index, ...
+                                 match_statistics, ...
+                                 cpg_k0_values_from_tile_index, ...
+                                 field_corrected_cpg_ij0s, ...
+                                 Fx_layer, ...
+                                 Fy_layer, ...
+                                 Fz_layer, ...
+                                 Fx_next_layer, ...
+                                 Fy_next_layer, ...
+                                 Fz_next_layer, ...
+                                 default_cpg_k0_values) ;
+                cpg_k0_values_from_tile_index(:,tile_index) = new_cpg_k0_values ;
+                if ~isnan(neighbor_tile_index) ,
+                    cpg_k0_values_from_tile_index(:,neighbor_tile_index) = k_plus_1_tile_cpg_k0_values ;
+                end
+                if isempty(other_tile_targets_at_cpg_k_indices_1_and_2) ,  % no below adjacent tile
+                    targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = targets_at_cpg_k_indices_3_and_4 ;
+                else
+                    targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = targets_at_cpg_k_indices_3_and_4 ;
+                    targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = other_tile_targets_at_cpg_k_indices_1_and_2 ;
+                end
+            end  % if has_nonzero_z_face_matches
+        end  % for tile_index = ...
+        
+        % ?
+        anchorinds = tile_index_from_tile_within_layer_index(do_run_optimpertile_from_tile_index(tile_index_from_tile_within_layer_index)) ;
         anchors = scopeloc.gridix(anchorinds,:) ;        
-        queryinds = tile_index_from_tile_within_layer_index(do_run_nomatchoptim_from_tile_index(tile_index_from_tile_within_layer_index)>0) ;
+        queryinds = tile_index_from_tile_within_layer_index(do_run_nomatchoptim_from_tile_index(tile_index_from_tile_within_layer_index)) ;
         queries = scopeloc.gridix(queryinds,:) ;
         IDX_nn = knnsearch(anchors,queries,'K',1) ;
         IDX = rangesearch(anchors,queries,sqrt(2)) ;
         
+        % ?
         for ine = 1 : length(queryinds) ,
             if isempty(IDX{ine})
                 IDX{ine} = IDX_nn(ine);
             end
         end
         
+        % ?
         for tile_index = tile_index_from_tile_within_layer_index ,  % layer t
-            neighbor_tile_index = tileneighbors(tile_index,7) ;
-            
-%             if tile_index == 2137 || neighbor_tile_index == 2137 ,
-%                keyboard
-%             end            
-
-            if do_run_nomatchoptim_from_tile_index(tile_index) ,
-                is_query =(tile_index==queryinds) ;
+            do_run_nomatchoptim = do_run_nomatchoptim_from_tile_index(tile_index) ;
+            if do_run_nomatchoptim ,  
+                neighbor_tile_index = tileneighbors(tile_index,7) ;
+                is_query = (tile_index==queryinds) ;
                 local_default_cpg_k0_values = round(median(cpg_k0_values_from_tile_index(:,anchorinds(IDX{is_query})),2))' ;
                 
-                [do_run_nomatchoptim_from_tile_index(tile_index), ...
-                 control_t_bot12, ...
-                 control_tp1_top12, ...
+                [targets_at_cpg_k_indices_3_and_4, ...
+                 other_tile_targets_at_cpg_k_indices_1_and_2, ...
                  cpg_k0_values_from_tile_index] = ...
                     nomatchoptim(tile_index, ...
                                  params, ...
@@ -248,8 +254,8 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
                                  Fz_next_layer, ...
                                  local_default_cpg_k0_values) ;
 
-                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = control_t_bot12 ;
-                targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = control_tp1_top12 ;
+                targets_from_tile_index(2*cpg_ij_count+1:end,:,tile_index) = targets_at_cpg_k_indices_3_and_4 ;
+                targets_from_tile_index(1:2*cpg_ij_count,:,neighbor_tile_index) = other_tile_targets_at_cpg_k_indices_1_and_2 ;
             end
         end
     end

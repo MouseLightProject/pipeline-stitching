@@ -1,8 +1,7 @@
-function [nooptim,control_t_bot12,control_tp1_top12,zlim_cntrl] = ...
+function [control_t_bot12,control_tp1_top12,zlim_cntrl] = ...
     nomatchoptim(idxt,params,tileneighbors,afftile,pixstats,zlim_cntrl,...
                  corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1,zlimdefaults)
 
-nooptim = false;
 htop = params.htop;
 Nlayer = params.Nlayer;
 Npts = (params.Ndivs+1).^2;

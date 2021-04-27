@@ -1,137 +1,190 @@
-function [nooptim,control_t_bot12,control_tp1_top12,zlim_cntrl]=...
-    optimpertile(idxt,params,tileneighbors,afftile,pixstats,zlim_cntrl,corrctrlpnttmp,Fxt,Fyt,Fzt,Fxtp1,Fytp1,Fztp1,zlimdefaults)
-nooptim = false;
-[control_t_bot12,control_tp1_top12] = deal([]);
-htop = params.htop;
-Nlayer = params.Nlayer;
-Npts = (params.Ndivs+1).^2;
-dims = params.imagesize;
-order = params.order;
-%zlimdefaults = params.zlimdefaults;
+function [targets_at_cpg_k_indices_3_and_4, other_tile_targets_at_cpg_k_indices_1_and_2, ...
+          new_k0_from_cpg_k_index, new_other_tile_k0_from_cpg_k_index] = ...
+        optimpertile(tile_index, ...
+                     params, ...
+                     other_tile_index, ...
+                     affine_transform_from_tile_index, ...
+                     match_z_statistics_from_tile_index, ...
+                     k0_from_cpg_k_index_from_tile_index, ...
+                     field_corrected_cpg_ij0s, ...
+                     Fx_layer, ...
+                     Fy_layer, ...
+                     Fz_layer, ...
+                     Fx_next_layer, ...
+                     Fy_next_layer, ...
+                     Fz_next_layer, ...
+                     default_k0_from_cpg_k_index)
+    % The other_tile_index shold be the index of the z+1 tile, or nan if there is no such tile.                              
+                 
+    % In all that follows, "CPG" means "control point grid".
+    
+    % Break out parameters
+    htop = params.htop ;  % the 1st CPG z plane is offset from the 2nd by this amount
+    cpg_k_count = params.Nlayer ;  % Number of k/z values in the per-tile control point grid (traditionally 4)    
+    %cpg_i_count = params.Ndivs+1 ;  % Number of i/x values in the per-tile control point grid (traditionally 5)
+    %cpg_j_count = params.Ndivs+1 ;  % Number of j/y values in the per-tile control point grid (traditionally 5)        
+    %cpg_ij_count = cpg_i_count * cpg_j_count ;  % Number of points in each k/z layer in the per-tile control point grid (traditionally 25)
+    tile_shape_ijk = params.imagesize ;  % tile shape, in xyz order (traditionally [1024 1536 251])
+    %order = params.order ;  % order of the field curvature model, I think
+    do_correct_targets = true ;  % I guess can be set to false for debugging?
 
-noopt = 0; % no optimization
-
-idxtm1 = tileneighbors(idxt,6);
-idxtp1 = tileneighbors(idxt,7);
-tformt = afftile(:,:,idxt);
-tstats = pixstats(idxt,:); % [idxt  idxtp1 med[idxt,idxtp1] min[idxt,idxtp1] max[idxt,idxtp1]];
-if ~isnan(idxtm1)
-    tformtm1 = afftile(:,:,idxtm1);
-    tstats_tm1 = pixstats(idxtm1,:); % [idxt  idxtp1 med[idxt,idxtp1] min[idxt,idxtp1] max[idxt,idxtp1]];
-end
-if ~isnan(idxtp1)
-    tformtp1 = afftile(:,:,idxtp1);
-    tstats_tp1 = pixstats(idxtp1,:); % [idxt  idxtp1 med[idxt,idxtp1] min[idxt,idxtp1] max[idxt,idxtp1]];
-end
-
-if isnan(idxtp1) % to adj tiles below
-    %%
-    % assign a default value
-    % z:0
-    zlim_3 = zlimdefaults(3);%dims(3)-16;
-    zlim_4 = zlimdefaults(4);%dims(3)-6;
-    
-    corrctrlpnttmp(:,3)= zlim_3;
-    contr_t_bot1 = [corrctrlpnttmp ones(Npts,1)]*tformt';
-    vect_bot1=[Fxt(contr_t_bot1) Fyt(contr_t_bot1) Fzt(contr_t_bot1)];
-    if noopt
-        vect_bot1(:) = 0;
-    end
-    contr_t_bot1_shifted = contr_t_bot1+vect_bot1;
-    
-    corrctrlpnttmp(:,3)= zlim_4;
-    contr_t_bot2 = [corrctrlpnttmp ones(Npts,1)]*tformt';
-    vect_bot2=[Fxt(contr_t_bot2) Fyt(contr_t_bot2) Fzt(contr_t_bot2)];
-    if noopt
-        vect_bot2(:) = 0;
-    end
-    contr_t_bot2_shifted = contr_t_bot2+vect_bot2;
-    
-    % book it
-    %control(2*Npts+1:end,:,idxt) = [contr_t_bot1_shifted;contr_t_bot2_shifted];
-    control_t_bot12 = [contr_t_bot1_shifted;contr_t_bot2_shifted];
-else
-    % check if there exists any descriptors between these two
-    % tiles, if yes optimize to cover them, if not use a default
-    % location
-    
-    % tstats: t/tp1/med(t)/med(tp1)/min(t)/min(tp1)/max(t)/max(tp1)
-    % get control lcocations
-    if isnan(tstats(1)) % get a section from the bottom of tile as we have noisy samples at the top of a slice
-        % will fill these after optimizing others
-        nooptim = true;
-        return
-        %         % same as above for the bottom of the current tile t.
-        %         zlim_3 = zlimdefaults(3);%dims(3)-11;
-        %         zlim_4 = zlimdefaults(4);%dims(3)-1;
-        %         tstats(8) = max(pixstats(:,8));
-        %         tstats(6) = min(pixstats(:,6));
+    % Break out things for this tile and the other tile (the k+1 tile)
+    affine_transform = affine_transform_from_tile_index(:,:,tile_index) ;
+    match_z_statistics = match_z_statistics_from_tile_index(tile_index,:) ;  % [idxt  idxtp1 med[idxt,idxtp1] min[idxt,idxtp1] max[idxt,idxtp1]];
+    old_k0_from_cpg_k_index = k0_from_cpg_k_index_from_tile_index(:,tile_index) ;
+    if isnan(other_tile_index) ,
+        other_tile_old_k0_from_cpg_k_index = nan(cpg_k_count, 1) ;
     else
-        % bot1: then get top of overlap on layer tm1
-        % (3)
-        zlim_3 = min(dims(3)-2,tstats(5)); % min(tb.dims(idxt,3)-2, so that zlim_4 is bounded by zlim3<zlim4<=dims-1
+        other_tile_affine_transform = affine_transform_from_tile_index(:,:,other_tile_index) ;
+        other_tile_old_k0_from_cpg_k_index = k0_from_cpg_k_index_from_tile_index(:, other_tile_index) ;
+    end
+    
+    % Handle each of the three major cases separately
+    if isnan(other_tile_index) ,  % if there is no k+1 tile
+        % In this case there's no need to potentially shift the 3rd and 4th CPG z planes
+        % to give good overlap with 1st and 2nd CPG z planes in the the k+1 tile.
+        % So we just compute the shifted targets, using the default k/z levels for the
+        % CPG planes.
+        
+        % Compute targets for the 3rd k/z plane of the CPG (control point grid) 
+        % These are shifted by the corrections intended to get the landmark pairs into
+        % register.
+        new_k0_at_cpg_k_index_3 = default_k0_from_cpg_k_index(3) ;
+        targets_at_cpg_k_index_3 = ...
+            corrected_targets_for_single_cpg_k_plane(new_k0_at_cpg_k_index_3, ...
+                                                     field_corrected_cpg_ij0s, ...
+                                                     affine_transform, ...
+                                                     Fx_layer, ...
+                                                     Fy_layer, ...
+                                                     Fz_layer, ...
+                                                     do_correct_targets) ;
+                                               
+        % Compute targets for the 4th k/z plane of the CPG (control point grid) 
+        % These are shifted by the corrections intended to get the landmark pairs into
+        % register.
+        new_k0_at_cpg_k_index_4 = default_k0_from_cpg_k_index(4) ;  
+        targets_at_cpg_k_index_4 = ...
+            corrected_targets_for_single_cpg_k_plane(new_k0_at_cpg_k_index_4, ...
+                                                     field_corrected_cpg_ij0s, ...
+                                                     affine_transform, ...
+                                                     Fx_layer, ...
+                                                     Fy_layer, ...
+                                                     Fz_layer, ...
+                                                     do_correct_targets) ;
+
+        % Set the return values for this case
+        new_k0_from_cpg_k_index = old_k0_from_cpg_k_index ;
+        new_other_tile_k0_from_cpg_k_index = other_tile_old_k0_from_cpg_k_index ;        
+        targets_at_cpg_k_indices_3_and_4 = [ targets_at_cpg_k_index_3 ; targets_at_cpg_k_index_4 ] ;
+        other_tile_targets_at_cpg_k_indices_1_and_2 = [] ;
+    else
+        % In this case we to need to potentially shift the 3rd and 4th CPG z planes
+        % to give good overlap with 1st and 2nd CPG z planes in the the k+1 tile.
+        % Once we've done this, we compute the shifted targets using the (already
+        % computed) interpolators.
+        
+        % Break out some of th z-face landmark match statistics
+        % match_z_statistics: [tile_index other_tile_index median_match_z other_median_match_z min_match_z other_min_match_z max_match_z other_max_match_z]
+        %median_match_z = match_z_statistics(3) ;
+        %other_median_match_z = match_z_statistics(4) ;
+        min_match_z = match_z_statistics(5) ;
+        other_min_match_z = match_z_statistics(6) ;
+        max_match_z = match_z_statistics(7) ;
+        other_max_match_z = match_z_statistics(8) ;        
+        
+        % Use some heuristics to compute the k/z level of the 3rd and 4th CPG planes
+        tile_shape_k = tile_shape_ijk(3) ;
+        new_k0_at_cpg_k_index_3 = min(tile_shape_k-2, min_match_z) ;  % min(tb.dims(idxt,3)-2, so that zlim_4 is bounded by zlim3<zlim4<=dims-1
         % bot2: then get bottom of overlap on layer tm1
         % (4)
-        zlim_4 = min(dims(3)-1,max(zlim_3+1,tstats(7))); % -2, as -1 results in error due to a bug in render
-        if zlim_3 <= zlim_cntrl(2,idxt) % means that a tile is fully covered by the two adjacend tiles
+        new_k0_at_cpg_k_index_4 = min(tile_shape_k-1, max(new_k0_at_cpg_k_index_3+1, max_match_z)) ;  % -2, as -1 results in error due to a bug in render
+        if new_k0_at_cpg_k_index_3 <= old_k0_from_cpg_k_index(2) ,  % means that a tile is fully covered by the two adjacent tiles
             % @@ HEURISTIC
-            zlim_cntrl(2,idxt) = max(1,zlim_3-1);
-            zlim_cntrl(1,idxt) = max(0,zlim_3-6);
+            new_k0_at_cpg_k_index_2 = max(1,new_k0_at_cpg_k_index_3-1) ;
+            new_k0_at_cpg_k_index_1 = max(0,new_k0_at_cpg_k_index_3-6) ;
+        else
+            new_k0_at_cpg_k_index_2 = old_k0_from_cpg_k_index(2) ;
+            new_k0_at_cpg_k_index_1 = old_k0_from_cpg_k_index(1) ;            
         end
-    end
-    
-    corrctrlpnttmp(:,3)= zlim_3;
-    contr_t_bot1 = [corrctrlpnttmp ones(Npts,1)]*tformt';
-    vect_bot1=[Fxt(contr_t_bot1) Fyt(contr_t_bot1) Fzt(contr_t_bot1)];
-    if noopt
-        vect_bot1(:) = 0;
-    end
-    contr_t_bot1_shifted = contr_t_bot1+vect_bot1;
-    
-    corrctrlpnttmp(:,3)= zlim_4;
-    contr_t_bot2 = [corrctrlpnttmp ones(Npts,1)]*tformt';
-    vect_bot2=[Fxt(contr_t_bot2) Fyt(contr_t_bot2) Fzt(contr_t_bot2)];
-    if noopt
-        vect_bot2(:) = 0;
-    end
-    contr_t_bot2_shifted = contr_t_bot2+vect_bot2;
-    
-    % book it
-    control_t_bot12 = [contr_t_bot1_shifted;contr_t_bot2_shifted];
-    %% %%%%%%%%%%%%%%%%%%%%%
-    % SEARCH
-    for zlim_2 = tstats(8)-1:-1:max(1,min(tstats(8)-1,tstats(6))) %
-        %zlim_2 = max(zlim_1_bound+1,tstats(8)-hbuf);
-        corrctrlpnttmp(:,3)= zlim_2;
+
+        % Compute the targets at 3rd CPG k/z plane
+        targets_at_cpg_k_index_3 = ...
+            corrected_targets_for_single_cpg_k_plane(new_k0_at_cpg_k_index_3, ...
+                                                     field_corrected_cpg_ij0s, ...
+                                                     affine_transform, ...
+                                                     Fx_layer, ...
+                                                     Fy_layer, ...
+                                                     Fz_layer, ...
+                                                     do_correct_targets) ;
+
+        % Compute the targets at 4th CPG k/z plane
+        targets_at_cpg_k_index_4 = ...
+            corrected_targets_for_single_cpg_k_plane(new_k0_at_cpg_k_index_4, ...
+                                                     field_corrected_cpg_ij0s, ...
+                                                     affine_transform, ...
+                                                     Fx_layer, ...
+                                                     Fy_layer, ...
+                                                     Fz_layer, ...
+                                                     do_correct_targets) ;
+
+        % Search for a CPG k plane in the other tile that gives us good overlap with this tile
+        for other_tile_new_k0_at_cpg_k_index_2 = other_max_match_z-1 : -1 : max(1,min(other_max_match_z-1,other_min_match_z)) ,
+            % Compute the targets at 2nd CPG k/z plane
+            other_tile_targets_at_cpg_k_index_2 = ...
+                corrected_targets_for_single_cpg_k_plane(other_tile_new_k0_at_cpg_k_index_2, ...
+                                                         field_corrected_cpg_ij0s, ...
+                                                         other_tile_affine_transform, ...
+                                                         Fx_next_layer, ...
+                                                         Fy_next_layer, ...
+                                                         Fz_next_layer, ...
+                                                         do_correct_targets) ;
+            
+            % make sure that there is overlap for all target points
+            if all(targets_at_cpg_k_index_4(:,3) > other_tile_targets_at_cpg_k_index_2(:,3)) ,
+                break
+            end
+        end
         
-        contr_tp1_top2 = [corrctrlpnttmp ones(Npts,1)]*tformtp1';
-        % shift it
-        vectp1_top2=[Fxtp1(contr_tp1_top2) Fytp1(contr_tp1_top2) Fztp1(contr_tp1_top2)];
-        if noopt
-            vectp1_top2(:) = 0;
-        end
-        contr_tp1_top2_shifted = contr_tp1_top2+vectp1_top2;
-        
-        % make sure that there is overlap for all control points
-        if all(contr_t_bot2_shifted(:,3)-contr_tp1_top2_shifted(:,3) > 0)
-            %zlim_2
-            break
-        end
+        % In the other tile, set the 1st CPG k/x plane to be at a set offset from the
+        % 2nd plane, but not below zero.
+        other_tile_new_k0_at_cpg_k_index_1 = max(0, other_tile_new_k0_at_cpg_k_index_2-htop) ;
+        other_tile_targets_at_cpg_k_index_1 = ...
+            corrected_targets_for_single_cpg_k_plane(other_tile_new_k0_at_cpg_k_index_1, ...
+                                                     field_corrected_cpg_ij0s, ...
+                                                     other_tile_affine_transform, ...
+                                                     Fx_next_layer, ...
+                                                     Fy_next_layer, ...
+                                                     Fz_next_layer, ...
+                                                     do_correct_targets) ;
+
+        % Set the return values
+        new_other_tile_k0_from_cpg_k_index = ...
+            [ other_tile_new_k0_at_cpg_k_index_1 ; other_tile_new_k0_at_cpg_k_index_2 ; other_tile_old_k0_from_cpg_k_index(3:4)] ;        
+        new_k0_from_cpg_k_index = [ new_k0_at_cpg_k_index_1 ; new_k0_at_cpg_k_index_2 ; new_k0_at_cpg_k_index_3 ; new_k0_at_cpg_k_index_4] ;
+        targets_at_cpg_k_indices_3_and_4 = [ targets_at_cpg_k_index_3 ; targets_at_cpg_k_index_4 ] ;
+        other_tile_targets_at_cpg_k_indices_1_and_2 = [other_tile_targets_at_cpg_k_index_1;other_tile_targets_at_cpg_k_index_2];
     end
-    %%%%%%
-    %%%%%%
-    % top1: then get top of overlap on layer t at crop "h"
-    % (1)
-    zlim_1 = max(0,zlim_2-htop);
-    corrctrlpnttmp(:,3)= zlim_1;
-    contr_tp1_top1 = [corrctrlpnttmp ones(Npts,1)]*tformtp1';
-    % shift it
-    vectp1_top1=[Fxtp1(contr_tp1_top1) Fytp1(contr_tp1_top1) Fztp1(contr_tp1_top1)];
-    if noopt
-        vectp1_top1(:) = 0;
+end
+
+
+
+function result = corrected_targets_for_single_cpg_k_plane(k0, ...
+                                                           field_corrected_cpg_ij0s, ...
+                                                           affine_transform, ...
+                                                           Fx, ...
+                                                           Fy, ...
+                                                           Fz, ...
+                                                           do_correct_targets)
+    % Use the interpolators Fx, Fy, Fz to generate corrected rendered-space
+    % targets for a single z plane of the CPG grid for the tile.
+    cpg_ij_count = size(field_corrected_cpg_ij0s, 1) ;
+    field_corrected_cpg_ijk0s = [ field_corrected_cpg_ij0s repmat(k0, [cpg_ij_count 1]) ] ;
+    baseline_targets = add_ones_column(field_corrected_cpg_ijk0s) * affine_transform' ;
+    if do_correct_targets , 
+        target_shift = ...
+            [Fx(baseline_targets) Fy(baseline_targets) Fz(baseline_targets)] ;
+        result = baseline_targets + target_shift ;
+    else
+        result = baseline_targets ;
     end
-    contr_tp1_top1_shifted = contr_tp1_top1+vectp1_top1;
-    control_tp1_top12 = [contr_tp1_top1_shifted;contr_tp1_top2_shifted];
-    zlim_cntrl(1:2,idxtp1) = [zlim_1;zlim_2];
-    zlim_cntrl(3:4,idxt) = [zlim_3;zlim_4];
 end
