@@ -61,15 +61,15 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         vecfield_path{tile_index} = filepath(length(vecfield_root)+1:end) ;  % e.g. '/2020-09-25/00/00000'
     end
     
-    % Compute the affine transform for each tile
-    affine_transform_from_tile_index = zeros(3, 4, tile_count) ;  % nm
+    % Compute the baseline affine transform for each tile
+    baseline_affine_transform_from_tile_index = zeros(3, 4, tile_count) ;  % nm
     for tile_index = 1 : tile_count ,
         % form an affine matrix
         linear_transform = linear_transform_from_tile_index(:,:,tile_index) ;  % nm
         nominal_tile_offset_in_mm = scopeloc.loc(tile_index,:) ;  % 1x3, mm
         nominal_tile_offset_in_nm = 1e6 * nominal_tile_offset_in_mm ;  % 1x3, nm        
-        affine_transform = [linear_transform nominal_tile_offset_in_nm'] ;  % nm
-        affine_transform_from_tile_index(:,:,tile_index) = affine_transform ;
+        baseline_affine_transform = [linear_transform nominal_tile_offset_in_nm'] ;  % nm
+        baseline_affine_transform_from_tile_index(:,:,tile_index) = baseline_affine_transform ;
     end
 
     % Collect some information about the point correspondences for each tile
@@ -104,7 +104,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ; % 25 x 2, zero-based ij coordinates, but non-integral
 
         % Get the affine transform
-        affine_transform = affine_transform_from_tile_index(:,:,tile_index) ;
+        baseline_affine_transform = baseline_affine_transform_from_tile_index(:,:,tile_index) ;
         
         % Compute the initial targets at each z plane of the control point grid
         targets_from_cpg_k_index = zeros(cpg_ij_count, 3, cpg_k_count) ;        
@@ -112,7 +112,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
             field_corrected_cpg_ijk0s = zeros(cpg_ij_count, 3) ;
             field_corrected_cpg_ijk0s(:,1:2) = field_corrected_cpg_ij0s ;
             field_corrected_cpg_ijk0s(:,3) = default_cpg_k0_values(cpg_k_index) ;
-            targets_at_this_cpg_k_index = add_ones_column(field_corrected_cpg_ijk0s) * affine_transform' ;
+            targets_at_this_cpg_k_index = add_ones_column(field_corrected_cpg_ijk0s) * baseline_affine_transform' ;
             targets_from_cpg_k_index(:, :, cpg_k_index) = targets_at_this_cpg_k_index ;
         end                   
 
@@ -162,7 +162,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         [Fx_layer, Fy_layer, Fz_layer, Fx_next_layer, Fy_next_layer, Fz_next_layer, XYZ_original, XYZ_neighbor_original, outliers] =...
             util.getInterpolants(tile_index_from_layer_tile_index, ...
                                  regpts, ...
-                                 affine_transform_from_tile_index, ...
+                                 baseline_affine_transform_from_tile_index, ...
                                  tile_ij1s, ...
                                  params, ...
                                  curvemodel, ...
@@ -183,9 +183,10 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         layer_used_match_count = size(Fx_layer.Points,1) ;
         fprintf('    Layer with k/z = %d total used matches: %d\n', tile_k, layer_used_match_count) ;
         
-        % Go through all the tiles for which we have nonzero z-face matches, and optimize
-        % the CPG for each.  Then, compute the target values for the moved z-planes of the
-        % CPG, using the interpolators to try to make the matched pairs each go to the same point.
+        % Go through all the tiles which either have no z+1 tile or for which we have
+        % nonzero z-face matches, and optimize the CPG for each.  Then, compute the
+        % target values for the moved z-planes of the CPG, using the interpolators to
+        % try to make the matched pairs each go to the same point.
         is_anchor_from_layer_tile_index = is_anchor_from_tile_index(tile_index_from_layer_tile_index) ;
         tile_index_from_layer_anchor_index = tile_index_from_layer_tile_index(is_anchor_from_layer_tile_index) ;
         for tile_index = tile_index_from_layer_anchor_index ,
@@ -202,7 +203,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
                 optimpertile(tile_index, ...
                              params, ...
                              neighbor_tile_index, ...
-                             affine_transform_from_tile_index, ...
+                             baseline_affine_transform_from_tile_index, ...
                              match_statistics, ...
                              cpg_k0_values_from_tile_index, ...
                              field_corrected_cpg_ij0s, ...
@@ -269,7 +270,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
                 nomatchoptim(tile_index, ...
                              params, ...
                              neighbor_tile_index, ...
-                             affine_transform_from_tile_index, ...
+                             baseline_affine_transform_from_tile_index, ...
                              match_statistics, ...
                              cpg_k0_values_from_tile_index(:,tile_index), ...
                              cpg_k0_values_from_tile_index(:,neighbor_tile_index), ...
@@ -300,24 +301,24 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     
     % Update per-tile affine transforms based on control points
     fprintf('Updating per-tile affine transforms based on control points...\n')
-    affine_transform = zeros(5,5,tile_count);
-    numX = size(targets_from_tile_index(:,:,1),1);
+    final_affine_transform_from_tile_index = zeros(5, 5, tile_count) ;
+    numX = size(targets_from_tile_index(:,:,1),1) ;
     for tile_index = 1 : tile_count ,
-        X = targets_from_tile_index(:,:,tile_index)'/1000;
-        x = cpg_i0_values;
-        y = cpg_j0_values;
-        z = cpg_k0_values_from_tile_index(:,tile_index)';
-        [xx,yy,zz] = ndgrid(x,y,z);
-        r = [xx(:),yy(:),zz(:)]';
-        X_aug = [X;ones(1,numX)];
-        r_aug = [r;ones(1,numX)];
+        X = targets_from_tile_index(:,:,tile_index)'/1000 ;  % /1000 converts nm to um (why? numerical stability?)
+        x = cpg_i0_values ;
+        y = cpg_j0_values ;
+        z = cpg_k0_values_from_tile_index(:,tile_index)' ;
+        [xx,yy,zz] = ndgrid(x,y,z) ;
+        r = [xx(:),yy(:),zz(:)]' ;
+        X_aug = [X;ones(1,numX)] ;
+        r_aug = [r;ones(1,numX)] ;
         %A = (X*x')/(x*x');
-        A = X_aug/r_aug ;
-        Aest = eye(5);
-        Aest(1:3,1:3) = A(1:3,1:3)*1000;
-        Aest(1:3,5) = A(1:3,4)*1000;
-        Aest(5,1:3) = A(4,1:3)*1000;
-        affine_transform(:,:,tile_index) = Aest;
+        A = X_aug/r_aug ;  % 4x4, Compute a single transform that approximates, as best it can, the mapping implied by all the control-point to target pairs.
+        A_full = eye(5) ;
+        A_full(1:3,1:3) = A(1:3,1:3)*1000 ;  % *1000 converts um back to nm (but why convert to um in the first place?)
+        A_full(1:3,5) = A(1:3,4)*1000 ;
+        A_full(5,1:3) = A(4,1:3)*1000 ;  % probably not necessary, these are all zero close to zero
+        final_affine_transform_from_tile_index(:,:,tile_index) = A_full ;
     end
     fprintf('Done updating per-tile affine transforms based on control points.\n')
     
@@ -329,8 +330,8 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     vecfield.xlim_cntrl = cpg_i0_values;
     vecfield.ylim_cntrl = cpg_j0_values;
     vecfield.zlim_cntrl = cpg_k0_values_from_tile_index;
-    vecfield.afftile = affine_transform_from_tile_index;
-    vecfield.tform = affine_transform;
+    vecfield.afftile = baseline_affine_transform_from_tile_index;
+    vecfield.tform = final_affine_transform_from_tile_index;
     vecfield.corrctrlpnttmp = field_corrected_cpg_ij0s;
     vecfield.ctrlpnttmp = cpg_ij1s-1;
     vecfield.bbox = bbox;
