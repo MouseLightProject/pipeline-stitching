@@ -1,4 +1,7 @@
 function are_close_enough = compare_vecfields(test_vecfield, reference_vecfield)
+    % Compare two vecfields structs, return true if they are close enough to each
+    % other in a practical sense.
+    
     % Look at the xlims
     test_xlim_cntrl = test_vecfield.xlim_cntrl ;
     reference_xlim_cntrl = reference_vecfield.xlim_cntrl ;

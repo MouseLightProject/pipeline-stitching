@@ -24,8 +24,8 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
     %     stitch(tile_folder_path, pipeline_output_folder, stitching_output_folder_path) ;
 
     % Define the paths to the different input files
-    descoutput = fullfile(pipeline_output_folder_path,'stage_3_descriptor_output') ;
-    matchoutput = fullfile(pipeline_output_folder_path,'stage_4_point_match_output') ;
+    landmark_folder_path = fullfile(pipeline_output_folder_path,'stage_3_descriptor_output') ;
+    match_folder_path = fullfile(pipeline_output_folder_path,'stage_4_point_match_output') ;
 
     % Use all the cores
     use_this_fraction_of_cores(1) ;
@@ -38,64 +38,52 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         mkdir(stitching_output_folder_path) ;
     end
 
-    scopefile = fullfile(stitching_output_folder_path, 'scopeloc.mat') ;
-    descriptorfolder = descoutput;
-    matchfolder = matchoutput;
+    % Get the path to the file storing the location of each tile according to the
+    % scope hardware.
+    scopeloc_file_path = fullfile(stitching_output_folder_path, 'scopeloc.mat') ;
 
-    desc_ch = {'1'};
-    %descriptorfile = fullfile(stitching_output_folder_path,sprintf('descriptors_ch%s.mat',desc_ch{:})); % accumulated descriptor file
+    % We use the background channel for finding matches, because the lipofuscin
+    % granules show up better on that channel.
+    channel_semantics_file_path = fullfile(tile_folder_path, 'channel-semantics.txt') ;
+    [neuron_channel_index, background_channel_index] = read_channel_semantics_file(channel_semantics_file_path) ;  %#ok<ASGLU>
+    desc_ch = { sprintf('%d', background_channel_index) } ;
 
-
-    %% 0: INTIALIZE
     % Read .acquisition file for each tile, and populate scopeloc with the
     % stage positions of each tile.
-    if exist(scopefile, 'file') ,  
+    if exist(scopeloc_file_path, 'file') ,  
         %load(scopefile, 'scopeloc', 'neighbors', 'experimentfolder') ;
-        load(scopefile, 'scopeloc') ;
+        load(scopeloc_file_path, 'scopeloc') ;
     else
         is_sample_post_2016_04_04 = true ;  % set this to 1 for datasets acquired after 160404
         scopeloc = getScopeCoordinates(stitching_output_folder_path, tile_folder_path, is_sample_post_2016_04_04) ;  % parse from acqusition files
         neighbors = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
         experimentfolder = stitching_output_folder_path ;  % for backwards compatibility
-        save(scopefile,'scopeloc','neighbors','experimentfolder') ;
+        save(scopeloc_file_path,'scopeloc','neighbors','experimentfolder') ;
     end
 
-    %%
-    % 1: LOAD MATCHED FEATS
+    % Load z-plane matched landmarks
     regpts_file_path = fullfile(stitching_output_folder_path,'regpts.mat') ;
     if exist(regpts_file_path, 'file') ,
-        %load(regpts_file_path, 'regpts', 'featmap') ;
         load(regpts_file_path, 'regpts') ;
     else
-        %fprintf('Loading matched features stage...\n') ;
-        %load(scopefile,'scopeloc');
         directions = 'Z';
-        checkversion = 1; % 1: loads the version with "checkversion" extension and overwrites existing match if there are more matched points
+        checkversion = 1;  % 1: loads the version with "checkversion" extension and overwrites existing match if there are more matched points
         % load finished tile matches. find badly matched or missing tile pairs
-        [regpts, featmap] = loadMatchedFeatures(scopeloc, matchfolder, directions, checkversion) ;    
+        [regpts, featmap] = loadMatchedFeatures(scopeloc, match_folder_path, directions, checkversion) ;    
         save(regpts_file_path, '-v7.3', 'regpts', 'featmap')
     end
-    % if ~exist(fullfile(stitching_output_folder_path,'regpts_1stiter.mat'),'file') % faster to make a copy
-    %     unix(sprintf('cp %s %s',regpts_file_path,fullfile(stitching_output_folder_path,'regpts_1stiter.mat')))
-    % end
 
-    % 2 scope params estimation.
-    % i) finds matches on x&y
-    % ii) finds field curvature based on matched points
-    % iii) creates a 3D affine model by jointly solving a linear system of
-    % equations
-
+    % Scope field curvature estimation
+    % i) Finds matches on x&y
+    % ii) Finds field curvature based on matched points
+    % iii) Creates a 3D linear transform by jointly solving a linear system of
+    %      equations
     scope_params_per_tile_file_path = fullfile(stitching_output_folder_path,'scopeparams_pertile.mat') ;
-    %if exist(descriptorfile, 'file') && exist(scope_params_per_tile_file_path, 'file') ,   
     if exist(scope_params_per_tile_file_path, 'file') ,   
-        %load(descriptorfile, 'descriptors') ;
-        %load(scope_params_per_tile_file_path, 'paireddescriptor', 'scopeparams', 'curvemodel', 'params') ;
         load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params') ;
     else
-        fprintf('Running tileProcessor stage...\n') ;
-        % paramater setting for descriptor match
-        scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));
-        
+        fprintf('Running field curvature stage...\n') ;
+        scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));        
         params = struct() ;
         params.scopeacqparams = scopeacqparams;
         params.imsize_um = [scopeacqparams.x_size_um scopeacqparams.y_size_um scopeacqparams.z_size_um];
@@ -109,12 +97,10 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         params.expensionratio = 1;
         params.order = 1;
         params.applyFC = 1;
-        %params.beadparams = [];%PLACEHOLDER FOR BEADS, very unlikely to have it...
         params.singleTile = 1;
-
         [curvemodel, scopeparams] = ...
-            tileProcessor(scopeloc,descriptorfolder,desc_ch,params);
-        %save(descriptorfile, 'descriptors', '-v7.3') ;
+            estimate_field_curvature_for_all_tiles(scopeloc, landmark_folder_path, desc_ch, params) ;
+        % scopeparams contains the per-tile *linear* transforms
         save(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params', '-v7.3') ;
     end
 
@@ -152,21 +138,11 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         load(vecfield3D_file_path, 'vecfield3D', 'params') ;
     else
         fprintf('Running vectorField3D stage...\n') ;
-        %load(scopefile,'scopeloc')
-        %load(regpts_file_path,'regpts')
-        %load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params')
-
-        vecfield3D = vectorField3D(params,scopeloc,regpts,scopeparams,curvemodel,[]);
+        vecfield3D = vectorField3D(params, scopeloc, regpts, scopeparams, curvemodel, []) ;
         save(vecfield3D_file_path, 'vecfield3D', 'params') ;
-        %save(fullfile(stitching_output_folder_path,sprintf('%s_%s',datestr(now,'mmddyyHHMMSS'),'vecfield3D')),'vecfield3D','params') ;
     end
 
     % Finally, output the yaml file(s)
-    %load(vecfield3D_file_path,'vecfield3D','params') ;
-    %vecfield3D = vecfield3D ;
-
-    % checkthese = [1 4 5 7]; % 0 - right - bottom - below
-    % [neighbors] = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format
     big = 1;
     ymldims = [params.imagesize 2];  % [1024 1536 251 2]
     root = vecfield3D.root;
@@ -174,11 +150,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
     outfile = fullfile(stitching_output_folder_path,sprintf('%s.control.yml',date));
     writeYML(outfile, targetidx, vecfield3D, big, ymldims, root) ;
     system(sprintf('cp %s %s',outfile,fullfile(stitching_output_folder_path,'tilebase.cache.yml'))) ;
-    
-    % params.big=0 ;
-    % params.outfile = sprintf('%s/%s.old.control.yml',stitching_output_folder_path,date);
-    % writeYML(params, targetidx(:)', vecfield3D)
-    % unix(sprintf('cp %s %s',params.outfile,fullfile(stitching_output_folder_path,'tilebase.cache_old.yml'))) ;
 
+    % Declare victory
     fprintf('Done with stitching.\n') ;
 end

@@ -1,4 +1,4 @@
-function [curvemodel, scopeparams] = tileProcessor(scopeloc, descriptorfolder, desc_ch,params)
+function [curvemodel, scopeparams] = estimate_field_curvature_for_all_tiles(scopeloc, descriptorfolder, desc_ch, params)
 
     checkthese = [1 4 5 7];  % self - right - bottom - below
     neighbors = buildNeighbor(scopeloc.gridix(:,1:3)); %[id -x -y +x +y -z +z] format    
