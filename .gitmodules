@@ -4,3 +4,6 @@
 [submodule "mouselight_toolbox"]
 	path = mouselight_toolbox
 	url = https://github.com/MouseLightProject/mouselight_toolbox
+[submodule "tmt"]
+	path = tmt
+	url = https://github.com/JaneliaSciComp/tmt
