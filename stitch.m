@@ -44,8 +44,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
     % We use the background channel for finding matches, because the lipofuscin
     % granules show up better on that channel.
-    channel_semantics_file_path = fullfile(tile_folder_path, 'channel-semantics.txt') ;
-    [neuron_channel_index, background_channel_index] = read_channel_semantics_file(channel_semantics_file_path) ;  %#ok<ASGLU>
+    [neuron_channel_index, background_channel_index] = read_channel_semantics_file(tile_folder_path) ;  %#ok<ASGLU>
     desc_ch = { sprintf('%d', background_channel_index) } ;
 
     % Read .acquisition file for each tile, and populate scopeloc with the
