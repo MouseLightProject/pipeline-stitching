@@ -1,3 +1,6 @@
+sample_date = '2021-03-17'  %#ok<NOPTS>
+do_force_computation = false ;
+
 raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
 pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s', sample_date)  %#ok<NOPTS> 
 line_fixed_tile_path = fullfile(pipeline_output_folder_path, 'stage_1_line_fix_output')
@@ -5,7 +8,7 @@ landmark_folder_path = fullfile(pipeline_output_folder_path, 'stage_3_descriptor
 match_folder_path = fullfile(pipeline_output_folder_path, 'stage_4_point_match_output')
 this_folder_path = fileparts(mfilename('fullpath')) ;
 memo_folder_path = fullfile(this_folder_path, sprintf('memos-%s', sample_date)) ;
-working_tile_path = line_fixed_tile_path ;
+working_tile_path = raw_tile_path ;
 
 % Build an index of the paths to raw tiles
 raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
@@ -48,8 +51,8 @@ median_landmark_count = median(landmark_count_from_tile_index)
 % Find a tile with a landmark count near the median
 [~, tile_index] = min(abs(landmark_count_from_tile_index - median_landmark_count))
 
-% Look at the tile
-%tile_index = 12000 ;
+% Look at a tile
+tile_index = 12000 ;
 relative_path = relative_path_from_tile_index{tile_index} ;
 imagery_file_relative_path = imagery_file_relative_path_from_relative_path(relative_path, working_channel_index) ;
 imagery_file_path = fullfile(working_tile_path, imagery_file_relative_path) 
@@ -87,4 +90,5 @@ hold off ;
 % hold on ;
 % plot(ij0_from_plane_landmark_index(:,1)+1, ij0_from_plane_landmark_index(:,2)+1, 'r.') ;
 % hold off ;
+
 

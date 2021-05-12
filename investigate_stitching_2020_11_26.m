@@ -7,7 +7,7 @@ memo_folder_path = fullfile(script_folder_path, sprintf('memos-%s', sample_date)
 % Build an index of the paths to raw tiles
 raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
 raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
-                                           sprintf('raw-tile-index-%s', sample_date), ...
+                                           'raw-tile-index', ...
                                            @()(build_raw_tile_index(raw_tile_path)), ...
                                            do_force_computation) ;
 ijk1_from_tile_index = raw_tile_index.ijk1_from_tile_index ;
@@ -24,14 +24,17 @@ tile_count = length(relative_path_from_tile_index)
 % There is a doubled process that is very clear.  What raw tile is this from? JW
 % says 2020-12-01/01/01916/01916-ngc.0.tif.  What does that look like?
 
-raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(fullfile(raw_tile_path, '2020-12-01/01/01916/01916-ngc.0.tif')) ;
+this_tile_relative_path = '2020-12-01/01/01916'
+imagery_file_relative_path = imagery_file_relative_path_from_relative_path(this_tile_relative_path, 0) ;  % 0 is channel index
+imagery_file_path = fullfile(raw_tile_path, imagery_file_relative_path)
+raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(imagery_file_path) ;
 raw_tile_stack_yxz = flip(flip(raw_tile_stack_yxz_flipped, 1), 2) ;
 raw_tile_stack_yxz_mip = max(raw_tile_stack_yxz, [], 3) ;
 f = figure() ;
 a = axes(f) ;
 imshow(raw_tile_stack_yxz_mip, 'Parent', a) ;    
 dijk = [ 0 0 0 ] ;
-title_string = sprintf('[ %s ]', strtrim(sprintf('%g ', dijk))) ;
+title_string = sprintf('[ %s ], %s', strtrim(sprintf('%g ', dijk)), this_tile_relative_path) ;
 title(a, title_string) ;
 
 % Find this tile in the index, look at the six tiles around it.  Do any of them
@@ -39,9 +42,10 @@ title(a, title_string) ;
 
 %%
 % Find this tile in the index
-this_tile_index = find(strcmp('2020-12-01/01/01916', relative_path_from_tile_index))
+this_tile_index = find(strcmp(this_tile_relative_path, relative_path_from_tile_index))
 this_tile_ijk1 = ijk1_from_tile_index(this_tile_index, :)
-dijk_from_neighbor_index = [-1 0 0 ; +1 0 0 ; 0 -1 0 ; 0 +1 0 ; 0 0 -1 ; 0 0 +1]
+%dijk_from_neighbor_index = [-1 0 0 ; +1 0 0 ; 0 -1 0 ; 0 +1 0 ; 0 0 -1 ; 0 0 +1]
+dijk_from_neighbor_index = [0 0 +1]
 neighbor_count = size(dijk_from_neighbor_index, 1) ;
 ijk1_from_neighbor_index = this_tile_ijk1 + dijk_from_neighbor_index
 
@@ -55,8 +59,10 @@ end
 relative_path_from_neighbor_index = relative_path_from_tile_index(tile_index_from_neighbor_index) ;
 
 for neighbor_index = 1 : neighbor_count ,
-    relative_path = relative_path_from_neighbor_index{neighbor_index} ;
-    imagery_file_relative_path = imagery_file_relative_path_from_relative_path(relative_path, 0) ;  % 0 is channel index
+    neighbor_relative_path = relative_path_from_neighbor_index{neighbor_index}
+    neighbor_tile_index = tile_index_from_neighbor_index(neighbor_index)
+    neighbor_tile_ijk1 = ijk1_from_neighbor_index(neighbor_index, :)
+    imagery_file_relative_path = imagery_file_relative_path_from_relative_path(neighbor_relative_path, 0) ;  % 0 is channel index
     imagery_file_path = fullfile(raw_tile_path, imagery_file_relative_path) 
     raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(imagery_file_path) ;
     raw_tile_stack_yxz = flip(flip(raw_tile_stack_yxz_flipped, 1), 2) ;
@@ -65,7 +71,7 @@ for neighbor_index = 1 : neighbor_count ,
     a = axes(f) ;  %#ok<LAXES>
     imshow(raw_tile_stack_yxz_mip, 'Parent', a) ;    
     dijk = dijk_from_neighbor_index(neighbor_index, :) ;
-    title_string = sprintf('[ %s ]', strtrim(sprintf('%g ', dijk))) ;
+    title_string = sprintf('[ %s ] %s', strtrim(sprintf('%g ', dijk)), neighbor_relative_path) ;
     title(a, title_string) ;
 end
 
@@ -107,7 +113,7 @@ for axis_index = 1 : 3 ,
         central_tile_ijk1 = ijk1_from_tile_index(central_tile_index,:) ;
         other_tile_ijk1 = central_tile_ijk1 + dijk ;
         if all(other_tile_ijk1 <= tile_lattice_shape) , 
-            other_tile_index = index_using_array(tile_index_from_ijk1, other_tile_ijk1) ;
+            other_tile_index = index_using_rows(tile_index_from_ijk1, other_tile_ijk1) ;
             if isfinite(other_tile_index) ,
                 other_tile_xyz = xyz_from_tile_index(other_tile_index, :) ;
                 dxyz = (other_tile_xyz - central_tile_xyz)' ;

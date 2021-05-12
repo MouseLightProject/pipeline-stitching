@@ -1,10 +1,10 @@
 raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
 pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s', sample_date)  %#ok<NOPTS> 
+line_fixed_tile_path = fullfile(pipeline_output_folder_path, 'stage_1_line_fix_output')
 landmark_folder_path = fullfile(pipeline_output_folder_path, 'stage_3_descriptor_output')
 match_folder_path = fullfile(pipeline_output_folder_path, 'stage_4_point_match_output')
 this_folder_path = fileparts(mfilename('fullpath')) ;
 memo_folder_path = fullfile(this_folder_path, sprintf('memos-%s', sample_date)) ;
-
 
 % Build an index of the paths to raw tiles
 raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
@@ -20,15 +20,24 @@ tile_index_from_ijk1 = raw_tile_index.tile_index_from_ijk1 ;
 tile_lattice_shape = size(tile_index_from_ijk1)
 tile_count = length(relative_path_from_tile_index) 
 
-% Specify semantics
-neuron_channel_index = 0 ;
-background_channel_index = 1 ;
+% Read channel semantics
+[neuron_channel_index, background_channel_index] = read_channel_semantics_file(raw_tile_path) ;
+working_channel_index = background_channel_index ;
+
+% Read in a single tile to get the tile shape
+middle_tile_index = round(tile_count/2) ;
+relative_path = relative_path_from_tile_index{middle_tile_index} ;
+imagery_file_relative_path = imagery_file_relative_path_from_relative_path(relative_path, working_channel_index) ;
+imagery_file_path = fullfile(raw_tile_path, imagery_file_relative_path) 
+raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(imagery_file_path) ;
+tile_shape_jik = size(raw_tile_stack_yxz_flipped) ;
+tile_shape_ijk = tile_shape_jik([2 1 3]) ;
 
 % Collect the landmarks for the background channel
 ijk_from_landmark_index_from_tile_index = ...
     compute_or_read_from_memo(memo_folder_path, ...
-                              sprintf('landmarks-%s', sample_date), ...
-                              @()(collect_landmarks(landmark_folder_path, relative_path_from_tile_index, background_channel_index)), ...
+                              sprintf('landmarks-channel-%d', working_channel_index), ...
+                              @()(collect_landmarks(landmark_folder_path, relative_path_from_tile_index, working_channel_index, tile_shape_ijk)), ...
                               do_force_computation) ;
 
 % Count the landmarks in each tile
@@ -93,15 +102,19 @@ assert(sum(has_z_plus_1_tile_from_tile_index) == pair_count) ;
 % Collect the z-face matches from disk
 match_info = ...
     compute_or_read_from_memo(memo_folder_path, ...
-                              sprintf('z-face-matches-%s', sample_date), ...
-                              @()(collect_z_face_matches(match_folder_path, relative_path_from_tile_index, background_channel_index, has_z_plus_1_tile_from_tile_index)), ...
+                              sprintf('z-face-matches-%s-channel-%d', sample_date, background_channel_index), ...
+                              @()(collect_z_face_matches(match_folder_path, ...
+                                                         relative_path_from_tile_index, ...
+                                                         background_channel_index, ...
+                                                         has_z_plus_1_tile_from_tile_index, ...
+                                                         tile_shape_ijk)), ...
                               do_force_computation) ;
-self_ijk_from_match_index_from_tile_index = match_info.self_ijk_from_match_index_from_tile_index ;
-neighbor_ijk_from_match_index_from_tile_index = match_info.neighbor_ijk_from_match_index_from_tile_index ;
+self_ijk0_from_match_index_from_tile_index = match_info.self_ijk0_from_match_index_from_tile_index ;
+neighbor_ijk0_from_match_index_from_tile_index = match_info.neighbor_ijk0_from_match_index_from_tile_index ;
 
 % Count the matches per-tile
-z_match_count_from_tile_index = cellfun(@(a)(size(a,1)), self_ijk_from_match_index_from_tile_index) ;
-check_z_match_count_from_tile_index = cellfun(@(a)(size(a,1)), neighbor_ijk_from_match_index_from_tile_index) ;
+z_match_count_from_tile_index = cellfun(@(a)(size(a,1)), self_ijk0_from_match_index_from_tile_index) ;
+check_z_match_count_from_tile_index = cellfun(@(a)(size(a,1)), neighbor_ijk0_from_match_index_from_tile_index) ;
 assert(isequal(z_match_count_from_tile_index, check_z_match_count_from_tile_index)) ;
 z_match_count_from_pair_index = z_match_count_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
 
