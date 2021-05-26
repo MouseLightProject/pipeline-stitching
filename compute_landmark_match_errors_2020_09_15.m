@@ -94,6 +94,23 @@ z_match_count_from_pair_index = z_match_count_from_tile_index(has_z_plus_1_tile_
 max_z_match_count = max(z_match_count_from_pair_index)
 median_z_match_count = median(z_match_count_from_pair_index)
 
+% Make a stack reflecting the z-matches for each tile
+tile_ijk1_from_pair_index = tile_ijk1_from_tile_index(self_tile_index_from_pair_index, :) ;
+z_match_count_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
+for pair_index = 1 : pair_count ,
+    tile_ijk1 = tile_ijk1_from_pair_index(pair_index,:) ;
+    z_match_count_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = z_match_count_from_pair_index(pair_index) ;    
+end
+
+% Make and show a montage of that
+z_match_count_from_tile_ijk1_montage = montage_from_stack_ijk(z_match_count_from_tile_ijk1) ;
+f = figure('color', 'w') ;
+a = axes(f) ;
+imagesc(z_match_count_from_tile_ijk1_montage, [0 600]) ;
+colorbar(a) ;
+title('Z-Match Count') 
+drawnow
+
 
 
 %
@@ -138,52 +155,124 @@ stage_affine_transform_from_tile_index(3,3,:) = spacing_um_xyz(3) ;
 stage_affine_transform_from_tile_index(:,4,:) = nominal_xyz_from_tile_index' ;
 
 % Compute the match errors for each tile, neighbor
-match_sse_from_neighbor_index_from_tile_index = ...
+stage_match_sse_from_neighbor_index_from_tile_index = ...
         compute_affine_landmark_match_error(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
                                             has_neighbor_from_neighbor_index_from_tile_index, ...
                                             neighbor_tile_index_from_neighbor_index_from_tile_index, ...
                                             neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
-                                            stage_affine_transform_from_tile_index)
+                                            stage_affine_transform_from_tile_index) ;
 
-z_match_sse_from_tile_index = reshape(match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
-z_match_sse_from_pair_index = z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index)
-z_match_mse_from_pair_index = z_match_sse_from_pair_index ./ z_match_count_from_pair_index
-z_match_rmse_from_pair_index = sqrt(z_match_mse_from_pair_index) 
-max_z_match_rmse = max(z_match_rmse_from_pair_index)
+stage_z_match_sse_from_tile_index = reshape(stage_match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
+stage_z_match_sse_from_pair_index = stage_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
+stage_z_match_mse_from_pair_index = stage_z_match_sse_from_pair_index ./ z_match_count_from_pair_index ;
 
-tile_ijk1_from_pair_index = tile_ijk1_from_tile_index(self_tile_index_from_pair_index, :) ;
+total_stage_z_match_sse = sum(stage_z_match_sse_from_pair_index)
+stage_z_match_rmse_from_pair_index = sqrt(stage_z_match_mse_from_pair_index) ;
+max_stage_z_match_rmse = max(stage_z_match_rmse_from_pair_index)
+median_stage_z_match_rmse = median(stage_z_match_rmse_from_pair_index, 'omitnan')
 
 % make a z-match RMSE stack
-z_match_count_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
-z_match_rmse_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
+stage_z_match_rmse_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
 for pair_index = 1 : pair_count ,
     tile_ijk1 = tile_ijk1_from_pair_index(pair_index,:) ;
-    z_match_rmse_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = z_match_rmse_from_pair_index(pair_index) ;    
-    z_match_count_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = z_match_count_from_pair_index(pair_index) ;    
+    stage_z_match_rmse_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = stage_z_match_rmse_from_pair_index(pair_index) ;    
 end
 
-z_match_rmse_from_tile_ijk1_montage = montage_from_stack_ijk(z_match_rmse_from_tile_ijk1) ;
+stage_z_match_rmse_from_tile_ijk1_montage = montage_from_stack_ijk(stage_z_match_rmse_from_tile_ijk1) ;
 f = figure('color', 'w') ;
 a = axes(f) ;
-imagesc(z_match_rmse_from_tile_ijk1_montage, [0 100]) ;
+imagesc(stage_z_match_rmse_from_tile_ijk1_montage, [0 100]) ;
 colorbar(a) ;
-title('Z-Match RMSE (um)') 
-drawnow
-
-z_match_count_from_tile_ijk1_montage = montage_from_stack_ijk(z_match_count_from_tile_ijk1) ;
-f = figure('color', 'w') ;
-a = axes(f) ;
-imagesc(z_match_count_from_tile_ijk1_montage, [0 600]) ;
-colorbar(a) ;
-title('Z-Match Count') 
+title('Stage Z-Match RMSE (um)') 
 drawnow
 
 % scatter plot of RMSE and matches per pair
 f = figure('color', 'w') ;
 a = axes(f) ;
-plot(a, z_match_count_from_pair_index, z_match_rmse_from_pair_index, '.') ;
-xlabel(a, 'Z-match count per tile pair') ;
-ylabel(a, 'Z-match RMSE per tile pair') ;
+plot(a, z_match_count_from_pair_index, stage_z_match_rmse_from_pair_index, '.') ;
+xlabel(a, 'Stage Z-match count per tile pair') ;
+ylabel(a, 'Stage Z-match RMSE per tile pair') ;
 
+% Load the per-tile affine transforms the stitcher outputs
+stitching_output_folder_path = fullfile(memo_folder_path, 'stitching-output') ;
+vecfield_file_path = fullfile(stitching_output_folder_path, 'vecfield3D.mat') ;
+mat = load(vecfield_file_path, 'vecfield3D') ;
+vecfield = mat.vecfield3D ;
+raw_final_affine_transform_from_tile_index = vecfield.tform ;  % 5 x 5 x tile_count
+raw_baseline_affine_transform_from_tile_index = vecfield.afftile ;  % 3 x 4 x tile_count
+targets_from_tile_index = vecfield.control ;
+cpg_i0_values = vecfield.xlim_cntrl ;
+cpg_j0_values = vecfield.ylim_cntrl ;
+cpg_k0_values_from_tile_index = vecfield.zlim_cntrl ;
+
+% All these transforms assume the zero-based indexing, but they also annoyingly
+% assume that the the tiles are flipped in x and y relative to how you'd think
+% they would be.  (B/c that's how mouselight tiles are acquired.)
+% So the control point grid (CPG) i0 and j0 values are in this 'flipped'
+% coordinate system.  I don't really want deal with these flipped coordinates,
+% so we need to unflip them.
+%
+% Also the final transform is a 5x5 matrix for each tile, so want to fix that.
+
+rare_final_affine_transform_from_tile_index = raw_final_affine_transform_from_tile_index([1 2 3 5],[1 2 3 5],:) ;
+medium_final_affine_transform_from_tile_index = rare_final_affine_transform_from_tile_index(1:3,:,:) ;
+A_flipped_per_tile = medium_final_affine_transform_from_tile_index(:,1:3,:) ;
+b_flipped_per_tile = medium_final_affine_transform_from_tile_index(:,4,:) ;
+S = diag([-1 -1 +1]) ;
+n_vector = [tile_shape_ijk(1)-1 tile_shape_ijk(2)-1 0]' ;
+A_per_tile = pagemtimes(A_flipped_per_tile, S) ;
+b_per_tile = pagemtimes(A_flipped_per_tile, n_vector) + b_flipped_per_tile ;
+final_affine_transform_from_tile_index = 1e-3 * horzcat(A_per_tile, b_per_tile) ;  % nm->um
+
+% Compute the match errors for each tile, neighbor
+final_affine_match_sse_from_neighbor_index_from_tile_index = ...
+        compute_affine_landmark_match_error(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
+                                            has_neighbor_from_neighbor_index_from_tile_index, ...
+                                            neighbor_tile_index_from_neighbor_index_from_tile_index, ...
+                                            neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                                            final_affine_transform_from_tile_index) ;
+
+final_affine_z_match_sse_from_tile_index = reshape(final_affine_match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
+final_affine_z_match_sse_from_pair_index = final_affine_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
+final_affine_z_match_mse_from_pair_index = final_affine_z_match_sse_from_pair_index ./ z_match_count_from_pair_index ;
+final_affine_z_match_rmse_from_pair_index = sqrt(final_affine_z_match_mse_from_pair_index) ;
+
+total_final_affine_z_match_sse = sum(final_affine_z_match_sse_from_pair_index)
+max_final_affine_z_match_rmse = max(final_affine_z_match_rmse_from_pair_index)
+median_final_affine_z_match_rmse = median(final_affine_z_match_rmse_from_pair_index, 'omitnan')
+
+tile_ijk1_from_pair_index = tile_ijk1_from_tile_index(self_tile_index_from_pair_index, :) ;
+
+% make a z-match RMSE stack
+
+
+sdlkgjl;sdkjfl;sdkjfl
+
+
+
+
+sdfsfgs
+final_affine_z_match_rmse_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
+for pair_index = 1 : pair_count ,
+    tile_ijk1 = tile_ijk1_from_pair_index(pair_index,:) ;
+    final_affine_z_match_rmse_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = final_affine_z_match_rmse_from_pair_index(pair_index) ;    
+end
+
+final_affine_z_match_rmse_from_tile_ijk1_montage = montage_from_stack_ijk(final_affine_z_match_rmse_from_tile_ijk1) ;
+f = figure('color', 'w') ;
+a = axes(f) ;
+imagesc(final_affine_z_match_rmse_from_tile_ijk1_montage, [0 100]) ;
+colorbar(a) ;
+title('Final affine Z-Match RMSE (um)') 
+drawnow
+
+% scatter plot of RMSE and matches per pair
+f = figure('color', 'w') ;
+a = axes(f) ;
+plot(a, z_match_count_from_pair_index, final_affine_z_match_rmse_from_pair_index, '.') ;
+xlabel(a, 'Final affine Z-match count per tile pair') ;
+ylabel(a, 'Final affine Z-match RMSE per tile pair') ;
+
+final_affine_sse_ratio = total_final_affine_z_match_sse/total_stage_z_match_sse
 
 

@@ -1,4 +1,8 @@
-raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
+sample_date = '2021-05-10'  %#ok<NOPTS>
+do_force_computation = true ;
+
+%raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
+raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/test-data/test-unscaled/%s', sample_date) ;
 pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s', sample_date)  %#ok<NOPTS> 
 line_fixed_tile_path = fullfile(pipeline_output_folder_path, 'stage_1_line_fix_output')
 landmark_folder_path = fullfile(pipeline_output_folder_path, 'stage_3_descriptor_output')
@@ -14,10 +18,10 @@ raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
 ijk1_from_tile_index = raw_tile_index.ijk1_from_tile_index ;
 nominal_xyz_from_tile_index = raw_tile_index.xyz_from_tile_index ;  % um
 relative_path_from_tile_index = raw_tile_index.relative_path_from_tile_index ;
-tile_index_from_til_ijk1 = raw_tile_index.tile_index_from_tile_ijk1 ;
+tile_index_from_tile_ijk1 = raw_tile_index.tile_index_from_tile_ijk1 ;
 
 % Display some features of the raw tile index
-tile_lattice_shape = size(tile_index_from_til_ijk1)
+tile_lattice_shape = size(tile_index_from_tile_ijk1)
 tile_count = length(relative_path_from_tile_index) 
 
 % Read channel semantics
@@ -87,7 +91,7 @@ title(sample_date) ;
 
 % Count the number of z-face pairs 
 has_z_plus_1_tile_from_ijk1 = false(tile_lattice_shape) ;
-has_z_plus_1_tile_from_ijk1(:,:,1:end-1) = isfinite(tile_index_from_til_ijk1(:,:,1:end-1)) & isfinite(tile_index_from_til_ijk1(:,:,2:end)) ;
+has_z_plus_1_tile_from_ijk1(:,:,1:end-1) = isfinite(tile_index_from_tile_ijk1(:,:,1:end-1)) & isfinite(tile_index_from_tile_ijk1(:,:,2:end)) ;
 pair_count = sum(sum(sum(has_z_plus_1_tile_from_ijk1))) 
 
 % Want to know if has z+1 tile from tile_index
@@ -184,6 +188,7 @@ xlabel('Fraction of landmarks that become z-face matches per tile') ;
 ylabel('Fraction of pairs (%)') ;
 ylim([0 100]) ;
 title(sample_date) ;
+
 
 
 
