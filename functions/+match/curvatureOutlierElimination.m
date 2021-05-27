@@ -55,28 +55,32 @@ else
     clear IDX
     queries = scopeloc.gridix(:,1:3);
     inliers = find(~unreliable(:,1));
-    anchors = scopeloc.gridix(inliers,1:3);
-    IDX = knnsearch(anchors,queries,'K',1,'distance',@distfun);%W=[1 1 100000]
-    neigbors_used(:,1) = inliers(IDX);
-    
-    % fill missing on x direction
-    for itile = 1:Ntile
-        ianch = inliers(IDX(itile));
-        paireddescriptor{itile}.onx = paireddescriptor{ianch}.onx;
-        curvemodel(1,:,itile) = curvemodel(1,:,ianch);
+    if ~isempty(inliers) ,
+        anchors = scopeloc.gridix(inliers,1:3);
+        IDX = knnsearch(anchors,queries,'K',1,'distance',@distfun);%W=[1 1 100000]
+        neigbors_used(:,1) = inliers(IDX);
+
+        % fill missing on x direction
+        for itile = 1:Ntile
+            ianch = inliers(IDX(itile));
+            paireddescriptor{itile}.onx = paireddescriptor{ianch}.onx;
+            curvemodel(1,:,itile) = curvemodel(1,:,ianch);
+        end
     end
     
     clear IDX
     inliers = find(~unreliable(:,2));
-    anchors = scopeloc.gridix(inliers,1:3);
-    IDX = knnsearch(anchors,queries,'K',1,'distance',@distfun);%W=[1 1 100000]
-    neigbors_used(:,2) = inliers(IDX);
-    
-    % fill missing on y direction
-    for itile = 1:Ntile
-        ianch = inliers(IDX(itile));
-        paireddescriptor{itile}.ony = paireddescriptor{ianch}.ony;
-        curvemodel(2,:,itile) = curvemodel(2,:,ianch);
+    if ~isempty(inliers) ,
+        anchors = scopeloc.gridix(inliers,1:3);
+        IDX = knnsearch(anchors,queries,'K',1,'distance',@distfun);%W=[1 1 100000]
+        neigbors_used(:,2) = inliers(IDX);
+
+        % fill missing on y direction
+        for itile = 1:Ntile
+            ianch = inliers(IDX(itile));
+            paireddescriptor{itile}.ony = paireddescriptor{ianch}.ony;
+            curvemodel(2,:,itile) = curvemodel(2,:,ianch);
+        end
     end
     
     for itile = 1:Ntile

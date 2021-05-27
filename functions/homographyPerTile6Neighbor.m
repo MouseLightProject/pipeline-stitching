@@ -47,20 +47,22 @@ params.order = 1;
 %mean transformation
 aff = mean(reshape([scopeparams(:).affineglFC],3,3,[]),3);
 
-scopeparamsUpdated = scopeparams;
 reliable = nan(Ntiles,1);
 for itile = 1:Ntiles
-    if isempty(scopeparamsUpdated(itile).affineglFC) 
+    if isempty(scopeparams(itile).affineglFC) 
         reliable(itile) = 0;
         disp(sprintf('WARNING: Empty affine estimate @tile: %d [%4.2f %4.2f %4.2f]',itile,(1000*scopeloc.loc(itile,:)))) %#ok<*DSPS>
-    elseif norm(scopeparamsUpdated(itile).affineglFC-aff)/norm(aff)*100>1
+    elseif norm(scopeparams(itile).affineglFC-aff)/norm(aff)*100>1
         disp(sprintf('WARNING: Bad affine estimate @tile: %d [%4.2f %4.2f %4.2f]',itile,(1000*scopeloc.loc(itile,:))))
         reliable(itile) = 0;
     else
         reliable(itile) = 1;
     end
 end
-if ~sum(~reliable);return;end
+if ~sum(~reliable) ,
+    return
+end
+
 %%
 inliers = find(reliable(:));
 % for every tiles estimate an affine
@@ -68,9 +70,13 @@ anchors = scopeloc.gridix(inliers,1:3);
 queries = scopeloc.gridix(:,1:3);
 IDX = knnsearch(anchors,queries,'K',1,'distance',@distfun);%W=[1 1 100000]
 % fill missing 
+scopeparamsUpdated = scopeparams;
 for itile = 1:Ntiles
     ianch = inliers(IDX(itile));
-    if itile == ianch; continue;end % skip if ancher is tile itself
+    % skip if anchor is tile itself
+    if itile == ianch ,
+        continue
+    end 
     paireddescriptor{itile}.onx = paireddescriptor{ianch}.onx;
     paireddescriptor{itile}.ony = paireddescriptor{ianch}.ony;
     curvemodel(:,:,itile) = curvemodel(:,:,ianch);

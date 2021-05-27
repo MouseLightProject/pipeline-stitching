@@ -72,6 +72,10 @@ end
 validthis = zeros(1,Ntiles);
 scopeparams = struct_with_shape_and_fields([1 Ntiles], {'imsize_um', 'dims', 'affinegl', 'affineglFC'}) ;
 
+% The fallback linear transform if things go very badly
+spacing_nm = 1000 * imsize_um ./ (dims-1) ;  % um -> nm
+fallback_linear_transform = diag(spacing_nm .* [1 1 -1]) ;
+
 %%
 %try; parfor_progress(0);catch;end
 parfor_progress(Ntiles) ;
@@ -182,10 +186,16 @@ parfor itile = 1:Ntiles ,
 %                 keyboard
 %             end
 
-            glS_=sdisp/Dall;
-            glSFC_=sdisp/DallFC;
+            glS_ = sdisp / Dall ;
+            glSFC_ = sdisp / DallFC ;
+            if any(any(~isfinite(glS_))) || cond(glS_) > 10 ,
+                glS_ = fallback_linear_transform ;
+            end
             scopeparams(itile).affinegl = glS_;
-            scopeparams(itile).affineglFC = glSFC_;
+            if any(any(~isfinite(glSFC_))) || cond(glSFC_) > 10 ,
+                glSFC_ = fallback_linear_transform ;
+            end
+            scopeparams(itile).affineglFC = glSFC_ ;
         end
     end
     parfor_progress() ;
