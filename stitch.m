@@ -1,4 +1,9 @@
-function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_folder_path)
+function stitch(tile_folder_path, ...
+                pipeline_output_folder_path, ...
+                stitching_output_folder_path, ...
+                do_force_computations, ...
+                do_perform_field_correction, ...                
+                do_show_visualizations)
     %STICHING pipeline. Reads scope generated json file and returns a yml
     %configuration file that goes into renderer. Requires calling cluster jobs
     %to create subresults, i.e. descriptors. These functions can also run in
@@ -23,6 +28,17 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
     %     stitching_output_folder_path = '/nrs/mouselight/cluster/classifierOutputs/2019-04-17/stitching-output' ;
     %     stitch(tile_folder_path, pipeline_output_folder, stitching_output_folder_path) ;
 
+    % Deal with optional arguments
+    if ~exist('do_force_computations', 'var') || isempty(do_force_computations) ,
+        do_force_computations = false ;
+    end
+    if ~exist('do_perform_field_correction', 'var') || isempty(do_perform_field_correction) ,
+        do_perform_field_correction = true ;
+    end
+    if ~exist('do_show_visualizations', 'var') || isempty(do_show_visualizations) ,
+        do_show_visualizations = false ;
+    end
+    
     % Define the paths to the different input files
     landmark_folder_path = fullfile(pipeline_output_folder_path,'stage_3_descriptor_output') ;
     match_folder_path = fullfile(pipeline_output_folder_path,'stage_4_point_match_output') ;
@@ -49,7 +65,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
     % Read .acquisition file for each tile, and populate scopeloc with the
     % stage positions of each tile.
-    if exist(scopeloc_file_path, 'file') ,  
+    if exist(scopeloc_file_path, 'file') && ~do_force_computations ,  
         %load(scopefile, 'scopeloc', 'neighbors', 'experimentfolder') ;
         load(scopeloc_file_path, 'scopeloc') ;
     else
@@ -62,7 +78,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
     % Load z-plane matched landmarks
     regpts_file_path = fullfile(stitching_output_folder_path,'regpts.mat') ;
-    if exist(regpts_file_path, 'file') ,
+    if exist(regpts_file_path, 'file')  && ~do_force_computations ,
         load(regpts_file_path, 'regpts') ;
     else
         directions = 'Z';
@@ -78,9 +94,9 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
     % iii) Creates a 3D linear transform by jointly solving a linear system of
     %      equations
     scope_params_per_tile_file_path = fullfile(stitching_output_folder_path,'scopeparams_pertile.mat') ;
-    if exist(scope_params_per_tile_file_path, 'file') ,   
+    if exist(scope_params_per_tile_file_path, 'file') && ~do_force_computations ,   
         load(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params') ;
-    else
+    else 
         fprintf('Running field curvature stage...\n') ;
         scopeacqparams = readScopeFile(fileparts(scopeloc.filepath{1}));        
         params = struct() ;
@@ -88,24 +104,25 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
         params.imsize_um = [scopeacqparams.x_size_um scopeacqparams.y_size_um scopeacqparams.z_size_um];
         params.overlap_um = [scopeacqparams.x_overlap_um scopeacqparams.y_overlap_um scopeacqparams.z_overlap_um];
         params.imagesize = [1024 1536 251];
-        params.viz = 0;
+        params.viz = do_show_visualizations ;
         params.debug = 0;
         params.Ndivs = 4;
         params.Nlayer = 4;
         params.htop = 5;
         params.expensionratio = 1;
         params.order = 1;
-        params.applyFC = 1;
+        params.applyFC = do_perform_field_correction ;
         params.singleTile = 1;
         [curvemodel, scopeparams] = ...
             estimate_field_curvature_for_all_tiles(scopeloc, landmark_folder_path, desc_ch, params) ;
+        fprintf('Done running field curvature stage.\n') ;
         % scopeparams contains the per-tile *linear* transforms
         save(scope_params_per_tile_file_path, 'scopeparams', 'curvemodel', 'params', '-v7.3') ;
     end
 
     % Make a video
     descriptor_match_quality_video_file_path = fullfile(stitching_output_folder_path, 'descriptor-match-quality.avi') ;
-    if ~exist(descriptor_match_quality_video_file_path, 'file') ,
+    if ~exist(descriptor_match_quality_video_file_path, 'file') && ~do_force_computations ,
         fprintf('Making descriptorMatchQuality video...\n') ;
         %load(scope_params_per_tile_file_path,'scopeparams')
         descriptorMatchQuality(regpts,scopeparams,scopeloc,descriptor_match_quality_video_file_path)
@@ -125,7 +142,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
     % Make a heatmap of some sort
     descriptor_match_quality_heatmap_video_file_path = fullfile(stitching_output_folder_path, 'descriptor-match-quality-heatmap.avi') ;
-    if ~exist(descriptor_match_quality_heatmap_video_file_path, 'file') ,
+    if ~exist(descriptor_match_quality_heatmap_video_file_path, 'file') && ~do_force_computations ,
         fprintf('Making descriptorMatchQualityHeatMap video...\n') ;
         descriptorMatchQualityHeatMap(regpts,scopeparams,scopeloc,descriptor_match_quality_heatmap_video_file_path) ;
         fprintf('Done making descriptorMatchQualityHeatMap video.\n') ;
@@ -133,7 +150,7 @@ function stitch(tile_folder_path, pipeline_output_folder_path, stitching_output_
 
     % Compute the 3D vector field
     vecfield3D_file_path = fullfile(stitching_output_folder_path,'vecfield3D.mat') ;
-    if exist(vecfield3D_file_path, 'file') ,
+    if exist(vecfield3D_file_path, 'file') && ~do_force_computations ,
         load(vecfield3D_file_path, 'vecfield3D', 'params') ;
     else
         fprintf('Running vectorField3D stage...\n') ;

@@ -11,7 +11,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
       % The z values in the control point gird (traditionally [2 20 230 248])
       % If these are symmetric, it implies that this is using zero-based indexing.
     %params.zlimdefaults = zlimdefaults;
-    do_apply_FC = 1 ;  % whether or not to apply the field correction, I think
+    do_apply_field_correction = params.applyFC ;  % whether or not to apply the field correction, I think
 
     % Build the neighbor index
     tile_ijk_from_tile_index = scopeloc.gridix(:,1:3) ;
@@ -98,9 +98,13 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
     baseline_targets_from_tile_index = zeros(cpg_ij_count*cpg_k_count, 3, tile_count) ;  % Location of each control point in the rendered space, for each tile
     for tile_index = 1 : tile_count ,
         % field curvature
-        this_tile_curve_model = curvemodel(:,:,tile_index) ;
-        field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;  
-          % 25 x 2, one-based ij coordinates, but non-integral
+        if do_apply_field_correction ,
+            this_tile_curve_model = curvemodel(:,:,tile_index) ;
+            field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
+                % 25 x 2, one-based ij coordinates, but non-integral
+        else
+            field_corrected_cpg_ij1s = cpg_ij1s ;
+        end
         field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ; % 25 x 2, zero-based ij coordinates, but non-integral
 
         % Get the affine transform
@@ -166,7 +170,7 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
                                  tile_ij1s, ...
                                  params, ...
                                  curvemodel, ...
-                                 do_apply_FC) ;
+                                 do_apply_field_correction) ;
 
         % Show some debugging output if called for
         if params.debug ,
@@ -192,8 +196,12 @@ function vecfield = vectorField3D(params, scopeloc, regpts, scopeparams, curvemo
         for tile_index = tile_index_from_layer_anchor_index ,
             neighbor_tile_index = tileneighbors(tile_index, 7) ;  % the z+1 tile
 
-            this_tile_curve_model = curvemodel(:,:,tile_index) ;
-            field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
+            if do_apply_field_correction ,
+                this_tile_curve_model = curvemodel(:,:,tile_index) ;
+                field_corrected_cpg_ij1s = util.fcshift(this_tile_curve_model, order, tile_ij1s, tile_shape_ijk, cpg_ij1s) ;
+            else
+                field_corrected_cpg_ij1s = cpg_ij1s ;
+            end
             field_corrected_cpg_ij0s = field_corrected_cpg_ij1s - 1 ;
 
             [targets_at_cpg_k_indices_3_and_4, ...

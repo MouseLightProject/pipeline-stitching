@@ -244,14 +244,6 @@ median_final_affine_z_match_rmse = median(final_affine_z_match_rmse_from_pair_in
 tile_ijk1_from_pair_index = tile_ijk1_from_tile_index(self_tile_index_from_pair_index, :) ;
 
 % make a z-match RMSE stack
-
-
-sdlkgjl;sdkjfl;sdkjfl
-
-
-
-
-sdfsfgs
 final_affine_z_match_rmse_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
 for pair_index = 1 : pair_count ,
     tile_ijk1 = tile_ijk1_from_pair_index(pair_index,:) ;

@@ -24,7 +24,7 @@ end
 
 debug = 0;
 %res = 0;
-do_show_visualizations = false ;
+do_show_visualizations = logical(params.viz) ;
 fignum = 101;
 
 projectionThr = 20; % distance between target and projected point has to be less than this number
@@ -61,11 +61,11 @@ matchparams.opt.beta=2;
 %%
 pixshiftpertile = nan(neigs_row_count,3,2);
 for ii=1:neigs_row_count
-    for iadj = 1:2
-        if isfinite(neigs(ii,iadj+1))
-            um_shift = 1000*(scopeloc.loc(neigs(ii,iadj+1),:)-scopeloc.loc(neigs(ii,1),:));
+    for axis_index = 1:2
+        if isfinite(neigs(ii,axis_index+1))
+            um_shift = 1000*(scopeloc.loc(neigs(ii,axis_index+1),:)-scopeloc.loc(neigs(ii,1),:));
             pixel_shift = round(um_shift.*(dims-1)./(imsize_um));
-            pixshiftpertile(ii,:,iadj) = pixel_shift;
+            pixshiftpertile(ii,:,axis_index) = pixel_shift;
         end
     end
 end
@@ -78,10 +78,10 @@ end
 % end
 % replace any nans (boundary tiles without an adjacent tile) with median values
 meds = squeeze(median(pixshiftpertile,1,'omitnan'))';
-for iadj = 1:2
+for axis_index = 1:2
     % replace any nan rows with median
-    these = isnan(pixshiftpertile(:,1,iadj));
-    pixshiftpertile(:,:,iadj) = util.rowreplace(pixshiftpertile(:,:,iadj),these,meds(iadj,:));
+    these = isnan(pixshiftpertile(:,1,axis_index));
+    pixshiftpertile(:,:,axis_index) = util.rowreplace(pixshiftpertile(:,:,axis_index),these,meds(axis_index,:));
 end
 %%
 % p(1): imaging center, ideally dims/2
@@ -98,8 +98,8 @@ else
     matchparams.init_array=[]; % creates a array initialization based on stage displacements
     pvals_12 = [[733 1.02141e-05];[465 -1.4153e-05]];
     for it = 1:neigs_row_count
-        for iadj = 1:2
-            matchparams.init_array(iadj,:,it)=[pvals_12(iadj,:) pixshiftpertile(it,iadj,iadj)];
+        for axis_index = 1:2
+            matchparams.init_array(axis_index,:,it)=[pvals_12(axis_index,:) pixshiftpertile(it,axis_index,axis_index)];
         end
     end
 end
@@ -139,7 +139,7 @@ paired_descriptor_for_this_tile_template{2}.Y = [];
 try parfor_progress(0);catch;end
 parfor_progress(neigs_row_count) ;
 
-parfor neigs_row_index = 1:neigs_row_count ,
+for neigs_row_index = 1:neigs_row_count ,
 %for neigs_row_index = 1:neigs_row_count ,
 %for neigs_row_index = round(neigs_row_count/2):neigs_row_count ,
 %tile_index_of_interest = find(strcmp('/2020-12-01/01/01916', scopeloc.relativepaths))
@@ -160,10 +160,10 @@ parfor neigs_row_index = 1:neigs_row_count ,
     %R_ = zeros(3); % median residual
     
     %%
-    for iadj = 1:2 , %1:x-overlap, 2:y-overlap, 3:z-overlap
+    for axis_index = 1:2 , %1:x-overlap, 2:y-overlap, 3:z-overlap
         %%
         % idaj : 1=right(+x), 2=bottom(+y), 3=below(+z)
-        other_tile_index = neigs(neigs_row_index,iadj+1);  %#ok<PFBNS>
+        other_tile_index = neigs(neigs_row_index,axis_index+1);  %#ok<PFBNS>
         
         if isnan(other_tile_index);continue;end
         other_tile_raw_fiducials_and_descriptors = descriptors{other_tile_index};
@@ -180,10 +180,10 @@ parfor neigs_row_index = 1:neigs_row_count ,
         
         %%
         nbound = [0 0];
-        nbound(1) = max(pixel_shift(iadj),min(other_tile_shifted_fiducials(:,iadj))) - 15;
-        nbound(2) = min(dims(iadj),max(central_tile_fiducials(:,iadj)))+0 + 15;
-        central_tile_fiducials_near_overlap = central_tile_fiducials(central_tile_fiducials(:,iadj)>nbound(1)&central_tile_fiducials(:,iadj)<nbound(2),:);
-        other_tile_shifted_fiducials_near_overlap = other_tile_shifted_fiducials(other_tile_shifted_fiducials(:,iadj)>nbound(1)&other_tile_shifted_fiducials(:,iadj)<nbound(2),:);
+        nbound(1) = max(pixel_shift(axis_index),min(other_tile_shifted_fiducials(:,axis_index))) - 15;
+        nbound(2) = min(dims(axis_index),max(central_tile_fiducials(:,axis_index)))+0 + 15;
+        central_tile_fiducials_near_overlap = central_tile_fiducials(central_tile_fiducials(:,axis_index)>nbound(1)&central_tile_fiducials(:,axis_index)<nbound(2),:);
+        other_tile_shifted_fiducials_near_overlap = other_tile_shifted_fiducials(other_tile_shifted_fiducials(:,axis_index)>nbound(1)&other_tile_shifted_fiducials(:,axis_index)<nbound(2),:);
         %%
         if size(central_tile_fiducials_near_overlap,1)<3 || size(other_tile_shifted_fiducials_near_overlap,1)<3 ,
             continue
@@ -195,7 +195,7 @@ parfor neigs_row_index = 1:neigs_row_count ,
             continue
         end
         matched_other_tile_fiducials = matched_other_tile_shifted_fiducials ;
-        matched_other_tile_fiducials(:,iadj) = matched_other_tile_shifted_fiducials(:,iadj) - pixel_shift(iadj);  % move it back to original location after CDP
+        matched_other_tile_fiducials(:,axis_index) = matched_other_tile_shifted_fiducials(:,axis_index) - pixel_shift(axis_index);  % move it back to original location after CDP
         %[X_e,Y_e,out_e,valid_e] = match.fcestimate(matched_central_tile_fiducials,matched_other_tile_fiducials,iadj,matchparams,pinit_model);
         % [X_e2,Y_e2,out_e2,valid_e2] = match.fcestimate(X_e,Y_e,iadj,matchparams);
         %%
@@ -205,7 +205,7 @@ parfor neigs_row_index = 1:neigs_row_count ,
                                    descriptors, ...
                                    neigs_row_index, ...
                                    pixel_shift, ...
-                                   iadj, ...
+                                   axis_index, ...
                                    central_tile_fiducials_near_overlap, ...
                                    other_tile_shifted_fiducials_near_overlap, ...
                                    matched_central_tile_fiducials, ...
@@ -224,7 +224,7 @@ parfor neigs_row_index = 1:neigs_row_count ,
 %         [X_e,Y_e,out_e,valid_e] = match.fcestimate(matched_central_tile_fiducials,matched_other_tile_fiducials,iadj,matchparams,pinit_model);
         
         [fced_matched_central_tile_fiducials, fced_matched_other_tile_fiducials, model_for_this_pair, is_valid] = ...
-            match.fcestimate(matched_central_tile_fiducials, matched_other_tile_fiducials, iadj, matchparams, pinit_model) ;
+            match.fcestimate(matched_central_tile_fiducials, matched_other_tile_fiducials, axis_index, matchparams, pinit_model) ;
         
         %%
         % flip back dimensions
@@ -232,10 +232,10 @@ parfor neigs_row_index = 1:neigs_row_count ,
         flipped_fced_matched_other_tile_fiducials   = util.correctTiles(fced_matched_other_tile_fiducials  , dims) ;
         
         % store pairs
-        mout(iadj,:) = model_for_this_pair;
-        paired_descriptor_for_this_tile{iadj}.valid = is_valid;
-        paired_descriptor_for_this_tile{iadj}.X = flipped_fced_matched_central_tile_fiducials;
-        paired_descriptor_for_this_tile{iadj}.Y = flipped_fced_matched_other_tile_fiducials;
+        mout(axis_index,:) = model_for_this_pair;
+        paired_descriptor_for_this_tile{axis_index}.valid = is_valid;
+        paired_descriptor_for_this_tile{axis_index}.X = flipped_fced_matched_central_tile_fiducials;
+        paired_descriptor_for_this_tile{axis_index}.Y = flipped_fced_matched_other_tile_fiducials;
         %R(:,iadj,ineig) = round(median(X_-Y_));
         %R_(:,iadj) = round(median(flipped_fced_matched_central_tile_fiducials-flipped_fced_matched_other_tile_fiducials));
     end
