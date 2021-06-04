@@ -1,16 +1,17 @@
-function [X_, Y_, out, valid] =  fcestimate(X_, Y_, iadj, params, pinit_model)
+function [X_, Y_, final_parameters, valid] =  fcestimate(X_, Y_, axis_index, params, pinit_model, dims)
     %FCESTIMATE Summary of this function goes here
     %   Detailed explanation goes here
     viz = params.viz;
     % model = @(p,y) p(3) - p(2).*((y-p(1)).^2); % FC model
     model = params.model;
 
-    if isfield(params,'dims')
-        dims = params.dims;
-    else
-        dims = [1024 1536 251];
-    end
-    dimcent = dims(setdiff([1:2],iadj))/2 ;  %#ok<NBRAK> % center of image along curvature axis
+%     if isfield(params,'dims')
+%         dims = params.dims;
+%     else
+%         dims = [1024 1536 251];
+%     end
+    other_axis_index = 3 - axis_index ;
+    dimcent = dims(other_axis_index)/2 ;  % center of image along curvature axis
 
     % polynomial coeeficients (p3-p2(y-p1)^2):
     % p(1) : imaging center ~ dims/2 +/- %10
@@ -20,27 +21,23 @@ function [X_, Y_, out, valid] =  fcestimate(X_, Y_, iadj, params, pinit_model)
     % p(3): avarage displacement: between [[1-%overlap]*dims dims],
     % initialization might not be useful, as this reduces to mean descriptor
     % displacement
-    if nargin==5
-        %pinit = params.init(iadj,:);
-        pinit = pinit_model(iadj,:);
-    else
-        dispvec = X_-Y_;
-        y = dispvec(:,iadj);
-        if iadj==1 % along x
-            pinit = [dimcent dimcent^-2 median(y)]; % median might be off for p(3), as curvature will bend the displacement. doing center weighted median will be more accurate.
-        else % along y
-            pinit = [dimcent -dimcent^-2 median(y)]; % median might be off for p(3), as curvature will bend the displacement. doing center weighted median will be more accurate.
-        end
-    end
+    initial_parameters = pinit_model(axis_index,:);
+%     dispvec = X_-Y_;
+%     y = dispvec(:,iadj);
+%     if iadj==1 % along x
+%         pinit = [dimcent dimcent^-2 median(y)]; % median might be off for p(3), as curvature will bend the displacement. doing center weighted median will be more accurate.
+%     else % along y
+%         pinit = [dimcent -dimcent^-2 median(y)]; % median might be off for p(3), as curvature will bend the displacement. doing center weighted median will be more accurate.
+%     end
 
 
     %%
-    [out,x,y,yest] = fit2disp(X_,Y_,iadj,model,pinit,dimcent);
+    [final_parameters,x,y,yest] = fit2disp(X_,Y_,axis_index,model,initial_parameters,dimcent);
     is_outlier_from_match_index = abs(y-yest)>2; % reject anything more than 2 pix away
 
     %%
     if viz ,
-        util.debug.vizCurvature(x, y, model, out, pinit, is_outlier_from_match_index, iadj) ;
+        util.debug.vizCurvature(x, y, model, final_parameters, initial_parameters, is_outlier_from_match_index, axis_index) ;
     end
     %if viz, figno=303; util.debug.vizCurvature; end %#ok<NASGU>
 
@@ -62,14 +59,14 @@ function [X_, Y_, out, valid] =  fcestimate(X_, Y_, iadj, params, pinit_model)
     %         yest2 = feval(model,out,x)
         valid=1;
     else
-        out = nan(1,3);
+        final_parameters = nan(1,3);
         valid = 0;
     end
 end
 
 
 
-function [out, x, y, yest] = fit2disp(X_, Y_, iadj, model, initial_parameters, dimcent)
+function [final_parameters, x, y, y_est] = fit2disp(X_, Y_, axis_index, model, initial_parameters, dimcent)
     % fits polynomial on displacement fields for a given direction
     %% set upper and lower boundaries
     %p(1): imaging center is around image center (ideally). pinit(1)*.05 rougly
@@ -95,14 +92,14 @@ function [out, x, y, yest] = fit2disp(X_, Y_, iadj, model, initial_parameters, d
     %lb3 = pinit(3)-3;
     %ub3 = pinit(3)+3;
     % Not anymore! ALT, 2021-06-03
-    lb3 = initial_parameters(3)-20 ;
-    ub3 = initial_parameters(3)+20 ;
+    lb3 = initial_parameters(3)-40 ;
+    ub3 = initial_parameters(3)+40 ;
     
     ub = [ub1 ub2 ub3];
     lb = [lb1 lb2 lb3];
     %%
     dispvec = X_-Y_;
-    y = dispvec(:,iadj);
+    y = dispvec(:,axis_index);
     
     %%% for non focus axis reject outliers based on vector norm. This should be
     %%% (roughly) constant for non curvature directions
@@ -117,25 +114,24 @@ function [out, x, y, yest] = fit2disp(X_, Y_, iadj, model, initial_parameters, d
     % Y_ = Y_(validinds,:);
     y = y(validinds,:);
     
-    x = X_(:,setdiff([1 2],iadj));
+    other_axis_index = 3 - axis_index ;
+    x = X_(:,other_axis_index) ;
     
     
     error_function = @(p) sum((y-feval(model,p,x)).^2);
     % sqerr = @(p) sum((y-feval(model,p,x)).^2);
     
-    options = optimoptions('fmincon','Display', 'off');
-    options.ConstraintTolerance = 1e-9;
+    options = optimoptions('fmincon','Display', 'iter');
+    %options.ConstraintTolerance = 1e-9;
     options.OptimalityTolerance = 1e-9;
-    nonlfun = @(x) match.edgeconstraint(x,model,initial_parameters,dimcent);
+    nonlfun = @(parameters)(match.edgeconstraint(parameters, model, initial_parameters, dimcent)) ;
     initial_error = feval(error_function, initial_parameters)
-    [out,final_error] = fmincon(error_function,initial_parameters,[],[],[],[],lb,ub,nonlfun,options) ;
+    %[initial_cneq, initial_ceq] = nonlfun(initial_parameters)
+    [final_parameters, final_error, exit_code] = fmincon(error_function,initial_parameters,[],[],[],[],lb,ub,[],options) ;
+    %[final_cneq, final_ceq] = nonlfun(final_parameters)
     final_error
-    % modd = pinit_model(:,:);
-    % modd(iadj,:) = out;
-    % match.vizCurvature(modd)
-    %%
-    % outlier rejection based on parametric model
-    yest = feval(model,out,x);
+    exit_code
+    y_est = feval(model,final_parameters,x);
 end
 
 
