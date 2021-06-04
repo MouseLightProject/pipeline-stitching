@@ -58,7 +58,7 @@ matchparams = struct() ;
 matchparams.model = model;
 matchparams.optimopts = optimopts;
 matchparams.opt = cpd_options ;
-matchparams.initial_distance_threshold = 40 ;  % distance between target and projected point has to be less than this number
+matchparams.initial_distance_threshold = 20 ;  % distance between target and projected point has to be less than this number
 matchparams.registered_distance_threshold = 20 ;  % distance between target and projected point has to be less than this number
 matchparams.debug = debug;
 matchparams.viz = do_show_visualizations;
@@ -148,8 +148,8 @@ paired_descriptor_for_this_tile_template{2}.Y = [];
 try parfor_progress(0);catch;end
 parfor_progress(tile_count) ;
 
-for tile_index = 1:tile_count ,
-    tile_index
+parfor tile_index = 1:tile_count ,
+    %tile_index
     
     %% load descriptor pairs X (center) - Y (adjacent tile)
     central_tile_index = tile_index_from_axis_index_from_tile_index(tile_index,1);
@@ -168,7 +168,7 @@ for tile_index = 1:tile_count ,
     
     %%
     for axis_index = 1:2 , %1:x-overlap, 2:y-overlap, 3:z-overlap
-        axis_index
+        %axis_index
         %%
         % idaj : 1=right(+x), 2=bottom(+y), 3=below(+z)
         other_tile_index = tile_index_from_axis_index_from_tile_index(tile_index,axis_index+1);  %#ok<PFBNS>
@@ -207,7 +207,7 @@ for tile_index = 1:tile_count ,
         % Run the matching algorithm
         [matched_central_tile_fiducials, matched_other_tile_shifted_fiducials] = ...
             match.descriptorMatch4XY(central_tile_fiducials_near_overlap, other_tile_shifted_fiducials_near_overlap, matchparams) ;
-        match_count = size(matched_central_tile_fiducials,1)
+        match_count = size(matched_central_tile_fiducials,1) ; %#ok<NASGU>
         if size(matched_central_tile_fiducials,1)<3 || size(matched_other_tile_shifted_fiducials,1)<3 ,
             continue
         end

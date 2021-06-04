@@ -17,8 +17,8 @@ function [c,ceq] = edgeconstraint(parameters, model, initial_parameters, dimcent
     
     delta = initial_extremal_y_values_relative_to_shift - extremal_y_values_relative_to_shift ;
     
-%     c = norm(delta) ;
-%     ceq = [] ;
-    ceq = norm(delta) ;
-    c = [] ;
+    c = norm(delta) ;
+    ceq = [] ;
+%     ceq = norm(delta) ;
+%     c = [] ;
 end

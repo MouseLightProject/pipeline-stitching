@@ -210,7 +210,7 @@ function [layer_matches_xyz, neighbor_layer_matches_xyz] = ...
         this_tile_regpts = regpts{tile_index} ;
         raw_tile_matches_ijk0 = this_tile_regpts.X ;
         raw_neighbor_matches_ijk0 = this_tile_regpts.Y ;
-        tile_match_count = size(raw_tile_matches_ijk0, 1) 
+        tile_match_count = size(raw_tile_matches_ijk0, 1) ;
         
         % If not enough matches, bail on this tile
         if tile_match_count < 250 ,
