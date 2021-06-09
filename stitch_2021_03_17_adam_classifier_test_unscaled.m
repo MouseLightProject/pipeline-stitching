@@ -1,8 +1,9 @@
 % Specify the input/output folders
 sample_tag = '2021-03-17-test-unscaled'  %#ok<NOPTS>
 analysis_tag = 'adam-classifier' 
-do_force_computations = true
+do_force_computations = false
 do_perform_field_correction = true
+do_run_in_debug_mode = false
 do_show_visualizations = true
 this_folder_path = fileparts(mfilename('fullpath')) ;
 tile_folder_path = '/groups/mousebrainmicro/mousebrainmicro/data/test-data/test-unscaled/2021-03-17'
@@ -12,4 +13,11 @@ analysis_memo_folder_path = fullfile(sample_memo_folder_path, analysis_tag) ;
 stitching_output_folder_path = fullfile(analysis_memo_folder_path, 'stitching-output') ;
 
 % Call the function that does the real work
-stitch(tile_folder_path, pipeline_output_folder, stitching_output_folder_path, do_force_computations, do_perform_field_correction, do_show_visualizations) ;
+stitch_options = struct('do_force_computations', do_force_computations, ...
+                        'do_perform_field_correction', do_perform_field_correction, ...
+                        'do_run_in_debug_mode', do_run_in_debug_mode, ...
+                        'do_show_visualizations', do_show_visualizations) ;
+stitch(tile_folder_path, ...
+       pipeline_output_folder, ...
+       stitching_output_folder_path, ...
+       stitch_options) ;

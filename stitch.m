@@ -1,9 +1,7 @@
 function stitch(tile_folder_path, ...
                 pipeline_output_folder_path, ...
                 stitching_output_folder_path, ...
-                do_force_computations, ...
-                do_perform_field_correction, ...                
-                do_show_visualizations)
+                stitch_options) 
     %STICHING pipeline. Reads scope generated json file and returns a yml
     %configuration file that goes into renderer. Requires calling cluster jobs
     %to create subresults, i.e. descriptors. These functions can also run in
@@ -29,14 +27,28 @@ function stitch(tile_folder_path, ...
     %     stitch(tile_folder_path, pipeline_output_folder, stitching_output_folder_path) ;
 
     % Deal with optional arguments
-    if ~exist('do_force_computations', 'var') || isempty(do_force_computations) ,
+    if ~exist('stitch_options', 'var') || isempty(stitch_options) ,
+        stitch_options = struct() ;
+    end    
+    if ~isfield(stitch_options, 'do_force_computations') || isempty(stitch_options.do_force_computations) ,
         do_force_computations = false ;
+    else
+        do_force_computations = stitch_options.do_force_computations ;
     end
-    if ~exist('do_perform_field_correction', 'var') || isempty(do_perform_field_correction) ,
+    if ~isfield(stitch_options, 'do_perform_field_correction') || isempty(stitch_options.do_perform_field_correction) ,
         do_perform_field_correction = true ;
+    else
+        do_perform_field_correction = stitch_options.do_perform_field_correction ;        
     end
-    if ~exist('do_show_visualizations', 'var') || isempty(do_show_visualizations) ,
+    if ~isfield(stitch_options, 'do_run_in_debug_mode') || isempty(stitch_options.do_run_in_debug_mode) ,
+        do_run_in_debug_mode = false ;
+    else
+        do_run_in_debug_mode = stitch_options.do_run_in_debug_mode ;        
+    end
+    if ~isfield(stitch_options, 'do_show_visualizations') || isempty(stitch_options.do_show_visualizations) ,
         do_show_visualizations = false ;
+    else
+        do_show_visualizations = stitch_options.do_show_visualizations ;        
     end
     
     % Define the paths to the different input files
@@ -104,6 +116,7 @@ function stitch(tile_folder_path, ...
         params.imsize_um = [scopeacqparams.x_size_um scopeacqparams.y_size_um scopeacqparams.z_size_um];
         params.overlap_um = [scopeacqparams.x_overlap_um scopeacqparams.y_overlap_um scopeacqparams.z_overlap_um];
         params.imagesize = [1024 1536 251];
+        params.do_run_in_debug_mode = do_run_in_debug_mode ;
         params.viz = do_show_visualizations ;
         params.debug = 0;
         params.Ndivs = 4;

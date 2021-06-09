@@ -89,11 +89,11 @@ function [final_parameters, x, y, y_est] = fit2disp(X_, Y_, axis_index, model, i
     
     % p(3): mean displacement is initialized based on descriptors, and stage is
     % mostly accurate, use a tight bound on stage displacement
-    lb3 = initial_parameters(3)-3;
-    ub3 = initial_parameters(3)+3;
-%     % Not anymore! ALT, 2021-06-03
-%     lb3 = initial_parameters(3)-40 ;
-%     ub3 = initial_parameters(3)+40 ;
+%     lb3 = initial_parameters(3)-3;
+%     ub3 = initial_parameters(3)+3;
+    % Not anymore! ALT, 2021-06-03
+    lb3 = initial_parameters(3)-40 ;
+    ub3 = initial_parameters(3)+40 ;
     
     ub = [ub1 ub2 ub3];
     lb = [lb1 lb2 lb3];
@@ -122,12 +122,12 @@ function [final_parameters, x, y, y_est] = fit2disp(X_, Y_, axis_index, model, i
     % sqerr = @(p) sum((y-feval(model,p,x)).^2);
     
     options = optimoptions('fmincon', 'Display', 'none') ;
-    options.ConstraintTolerance = 1e-9 ;
+    %options.ConstraintTolerance = 1e-9 ;
     options.OptimalityTolerance = 1e-9 ;
-    nonlfun = @(parameters)(match.edgeconstraint(parameters, model, initial_parameters, dimcent)) ;
+    %nonlfun = @(parameters)(match.edgeconstraint(parameters, model, initial_parameters, dimcent)) ;
     %initial_error = feval(error_function, initial_parameters)
     %[initial_cneq, initial_ceq] = nonlfun(initial_parameters)
-    [final_parameters, final_error, exit_code] = fmincon(error_function,initial_parameters,[],[],[],[],lb,ub,nonlfun,options) ;  %#ok<ASGLU>
+    [final_parameters, final_error, exit_code] = fmincon(error_function,initial_parameters,[],[],[],[],lb,ub,[],options) ;  %#ok<ASGLU>
     %[final_cneq, final_ceq] = nonlfun(final_parameters)
     %final_error
     %exit_code
