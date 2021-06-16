@@ -126,7 +126,7 @@ match_info = ...
 self_ijk0_from_match_index_from_tile_index = match_info.self_ijk0_from_match_index_from_tile_index ;
 neighbor_ijk0_from_match_index_from_tile_index = match_info.neighbor_ijk0_from_match_index_from_tile_index ;
 
-% Count the matches per-tile
+% Count the matches per tile
 z_match_count_from_tile_index = cellfun(@(a)(size(a,1)), self_ijk0_from_match_index_from_tile_index) ;
 check_z_match_count_from_tile_index = cellfun(@(a)(size(a,1)), neighbor_ijk0_from_match_index_from_tile_index) ;
 assert(isequal(z_match_count_from_tile_index, check_z_match_count_from_tile_index)) ;
