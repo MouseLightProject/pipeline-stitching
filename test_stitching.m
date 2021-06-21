@@ -1,23 +1,27 @@
 % Specify the input/output folders
 sample_date = '2020-09-15'  %#ok<NOPTS>
-do_force_computations = false 
+do_force_computations = true 
 do_perform_field_correction = true 
+do_run_in_debug_mode = true
 do_show_visualizations = false 
-tile_folder_path = sprintf('/nearline/mouselight/data/RAW_archive/%s/Tiling', sample_date)  %#ok<NOPTS>
+tile_folder_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date)  %#ok<NOPTS>
+%tile_folder_path = sprintf('/nearline/mouselight/data/RAW_archive/%s/Tiling', sample_date)  %#ok<NOPTS>
 pipeline_output_folder = sprintf('/nrs/mouselight/pipeline_output/%s', sample_date)  %#ok<NOPTS> 
 this_file_path = mfilename('fullpath') ;
 this_folder_path = fileparts(this_file_path) ;
-memo_folder_path = fullfile(this_folder_path, sprintf('memos-%s', sample_date)) ;
+memo_folder_path = fullfile(this_folder_path, 'memos', sample_date) ;
 stitching_output_folder_path = fullfile(memo_folder_path, 'stitching-output') ;  
 
 % Call the function that does the real work
+stitch_options = struct('do_force_computations', do_force_computations, ...
+                        'do_perform_field_correction', do_perform_field_correction, ...
+                        'do_run_in_debug_mode', do_run_in_debug_mode, ...
+                        'do_show_visualizations', do_show_visualizations) ;
 tic_id = tic() ;
 stitch(tile_folder_path, ...
        pipeline_output_folder, ...
        stitching_output_folder_path, ...
-       do_force_computations, ...
-       do_perform_field_correction, ...
-       do_show_visualizations) ;
+       stitch_options) ;
 
 vecfield_file_path = fullfile(stitching_output_folder_path, 'vecfield3D.mat')
 mat = load(vecfield_file_path, 'vecfield3D', 'params') ;

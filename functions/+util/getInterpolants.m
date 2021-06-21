@@ -159,8 +159,8 @@ function [Fx_layer, ...
         hold on
         plot3(layer_xyz_from_inlier_match_index(:,1),layer_xyz_from_inlier_match_index(:,2),layer_xyz_from_inlier_match_index(:,3),'k.') % layer t
         plot3(next_layer_xyz_from_inlier_match_index(:,1),next_layer_xyz_from_inlier_match_index(:,2),next_layer_xyz_from_inlier_match_index(:,3),'r.') % layer tp1
-        myplot3([tile_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,tile_index)','g.') % layer t
-        myplot3([neighbor_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,neighbor_tile_index)','m.') % layer tp1
+        %myplot3([tile_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,tile_index)','g.') % layer t
+        %myplot3([neighbor_matches_ijk0 ones(size(tile_matches_ijk0,1),1)]*affine_transform_from_tile_index(:,:,neighbor_tile_index)','m.') % layer tp1
         set(gca,'Zdir','reverse');
         legend('layer t','layer t+1')
         set(gca,'Ydir','reverse')
@@ -210,10 +210,10 @@ function [layer_matches_xyz, neighbor_layer_matches_xyz] = ...
         this_tile_regpts = regpts{tile_index} ;
         raw_tile_matches_ijk0 = this_tile_regpts.X ;
         raw_neighbor_matches_ijk0 = this_tile_regpts.Y ;
-        tile_match_count = size(raw_tile_matches_ijk0, 1) ;
+        tile_match_count = size(raw_tile_matches_ijk0, 1) 
         
         % If not enough matches, bail on this tile
-        if tile_match_count < 250 ,
+        if tile_match_count < 50 ,
             tile_matches_xyz_from_tile_within_layer_index{tile_within_layer_index} = zeros(0,3) ;
             neighbor_matches_xyz_from_tile_within_layer_index{tile_within_layer_index} = zeros(0,3) ;            
         else
