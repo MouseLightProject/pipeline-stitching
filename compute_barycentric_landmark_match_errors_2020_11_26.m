@@ -1,14 +1,16 @@
-sample_date = '2020-11-26'  %#ok<NOPTS>
+sample_tag = '2020-11-26'  %#ok<NOPTS>
+analysis_tag = 'production-classifier-z-match-count-threshold-50' 
 path_kind_to_use_for_imagery = 'line-fixed' 
 do_force_computation = true ;
 
-raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
-pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s', sample_date)  %#ok<NOPTS> 
+raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_tag) ;
+pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s', sample_tag)  %#ok<NOPTS> 
 line_fixed_tile_path = fullfile(pipeline_output_folder_path, 'stage_1_line_fix_output')
 landmark_folder_path = fullfile(pipeline_output_folder_path, 'stage_3_descriptor_output')
 match_folder_path = fullfile(pipeline_output_folder_path, 'stage_4_point_match_output')
 this_folder_path = fileparts(mfilename('fullpath')) ;
-memo_folder_path = fullfile(this_folder_path, sprintf('memos-%s', sample_date)) ;
+sample_memo_folder_path = fullfile(this_folder_path, 'memos', sample_tag) ;
+analysis_memo_folder_path = fullfile(sample_memo_folder_path, analysis_tag) ;
 
 if ~exist('path_kind_to_use_for_imagery', 'var') || isempty(path_kind_to_use_for_imagery) || strcmp(path_kind_to_use_for_imagery, 'line-fixed') ,
     imagery_tile_path = line_fixed_tile_path ;
@@ -19,7 +21,7 @@ else
 end
 
 % Build an index of the paths to raw tiles
-raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
+raw_tile_index = compute_or_read_from_memo(sample_memo_folder_path, ...
                                            'raw-tile-index', ...
                                            @()(build_raw_tile_index(raw_tile_path)), ...
                                            do_force_computation) ;
@@ -42,7 +44,7 @@ working_channel_index = background_channel_index ;
 
 % Collect the landmarks for the background channel
 ijk0_from_landmark_index_from_tile_index = ...
-    compute_or_read_from_memo(memo_folder_path, ...
+    compute_or_read_from_memo(sample_memo_folder_path, ...
                               sprintf('landmarks-channel-%d', working_channel_index), ...
                               @()(collect_landmarks(landmark_folder_path, relative_path_from_tile_index, working_channel_index, tile_shape_ijk)), ...
                               do_force_computation) ;
@@ -75,8 +77,8 @@ self_tile_index_from_pair_index = find(has_z_plus_1_tile_from_tile_index) ;
 % Collect the z-face matches from disk
 match_info = ...
     compute_or_read_from_memo(...
-        memo_folder_path, ...
-        sprintf('z-face-matches-%s-channel-%d', sample_date, background_channel_index), ...
+        sample_memo_folder_path, ...
+        sprintf('z-face-matches-channel-%d', background_channel_index), ...
         @()(collect_z_face_matches(match_folder_path, ...
                                    relative_path_from_tile_index, ...
                                    background_channel_index, ...
@@ -97,7 +99,7 @@ median_z_match_count = median(z_match_count_from_pair_index)
 
 
 %
-% Compute errors
+% Compute things we'll need for all the error computations
 %
 
 % Collect information about neighbors of each tile
@@ -130,6 +132,13 @@ neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx(3,:) = neighbor_ijk
 match_count_from_neighbor_index_from_tile_index = zeros(neighbor_count, tile_count) ;
 match_count_from_neighbor_index_from_tile_index(3,:) = z_match_count_from_tile_index ;
 
+
+
+%%
+%
+% Do the nominal afffine
+%
+
 % Assemble the stage-based affine transforms
 stage_affine_transform_from_tile_index = zeros(3, 4, tile_count) ;
 stage_affine_transform_from_tile_index(1,1,:) = spacing_um_xyz(1) ;
@@ -138,16 +147,16 @@ stage_affine_transform_from_tile_index(3,3,:) = spacing_um_xyz(3) ;
 stage_affine_transform_from_tile_index(:,4,:) = nominal_xyz_from_tile_index' ;
 
 % Compute the match errors for each tile, neighbor
-stage_match_sse_from_neighbor_index_from_tile_index = ...
-        compute_affine_landmark_match_error(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
-                                            has_neighbor_from_neighbor_index_from_tile_index, ...
-                                            neighbor_tile_index_from_neighbor_index_from_tile_index, ...
-                                            neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
-                                            stage_affine_transform_from_tile_index)
-
-stage_z_match_sse_from_tile_index = reshape(stage_match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
-stage_z_match_sse_from_pair_index = stage_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index)
-stage_z_match_mse_from_pair_index = stage_z_match_sse_from_pair_index ./ z_match_count_from_pair_index
+stage_dist_from_match_idx_from_neighbor_idx_from_tile_idx = ...
+        compute_affine_landmark_match_distance(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
+                                               has_neighbor_from_neighbor_index_from_tile_index, ...
+                                               neighbor_tile_index_from_neighbor_index_from_tile_index, ...
+                                               neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                                               stage_affine_transform_from_tile_index) ;
+stage_z_match_sse_from_neighbor_index_from_tile_index = cellfun(@(v)(sum(v.^2)), stage_dist_from_match_idx_from_neighbor_idx_from_tile_idx) ;
+stage_z_match_sse_from_tile_index = reshape(stage_z_match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
+stage_z_match_sse_from_pair_index = stage_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
+stage_z_match_mse_from_pair_index = stage_z_match_sse_from_pair_index ./ z_match_count_from_pair_index ;
 
 total_stage_z_match_sse = sum(stage_z_match_sse_from_pair_index)
 stage_z_match_rmse_from_pair_index = sqrt(stage_z_match_mse_from_pair_index) 
@@ -187,12 +196,16 @@ a = axes(f) ;
 plot(a, z_match_count_from_pair_index, stage_z_match_rmse_from_pair_index, '.') ;
 xlabel(a, 'Stage Z-match count per tile pair') ;
 ylabel(a, 'Stage Z-match RMSE per tile pair') ;
+
+
+
+%%
 %
 % Do the final affine
 %
 
 % Load the per-tile affine transforms the stitcher outputs
-stitching_output_folder_path = fullfile(memo_folder_path, 'stitching-output') ;
+stitching_output_folder_path = fullfile(analysis_memo_folder_path, 'stitching-output') ;
 vecfield_file_path = fullfile(stitching_output_folder_path, 'vecfield3D.mat') ;
 mat = load(vecfield_file_path, 'vecfield3D') ;
 vecfield = mat.vecfield3D ;
@@ -231,13 +244,14 @@ b_per_tile = pagemtimes(A_flipped_per_tile, n_vector) + b_flipped_per_tile ;
 final_affine_transform_from_tile_index = 1e-3 * horzcat(A_per_tile, b_per_tile) ;  % nm->um
 
 % Compute the match errors for each tile, neighbor
-final_affine_match_sse_from_neighbor_index_from_tile_index = ...
-        compute_affine_landmark_match_error(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
-                                            has_neighbor_from_neighbor_index_from_tile_index, ...
-                                            neighbor_tile_index_from_neighbor_index_from_tile_index, ...
-                                            neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
-                                            final_affine_transform_from_tile_index) ;
+final_affin_dist_from_match_idx_from_neighbor_idx_from_tile_idx = ...
+        compute_affine_landmark_match_distance(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
+                                               has_neighbor_from_neighbor_index_from_tile_index, ...
+                                               neighbor_tile_index_from_neighbor_index_from_tile_index, ...
+                                               neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                                               final_affine_transform_from_tile_index) ;
 
+final_affine_match_sse_from_neighbor_index_from_tile_index = cellfun(@(v)(sum(v.^2)), final_affin_dist_from_match_idx_from_neighbor_idx_from_tile_idx) ;                                          
 final_affine_z_match_sse_from_tile_index = reshape(final_affine_match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
 final_affine_z_match_sse_from_pair_index = final_affine_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
 final_affine_z_match_mse_from_pair_index = final_affine_z_match_sse_from_pair_index ./ z_match_count_from_pair_index ;
@@ -282,55 +296,113 @@ final_affine_sse_ratio = total_final_affine_z_match_sse/total_stage_z_match_sse
 
 % Compute the match errors for each tile, neighbor
 tic_id = tic() ;
-[barycentric_match_sse_from_neighbor_index_from_tile_index, barycentric_match_count_from_neighbor_index_from_tile_index] = ...
-        compute_barycentric_landmark_match_error(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
-                                                 has_neighbor_from_neighbor_index_from_tile_index, ...
-                                                 neighbor_tile_index_from_neighbor_index_from_tile_index, ...
-                                                 neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
-                                                 cpg_i0_values , ...
-                                                 cpg_j0_values , ...
-                                                 cpg_k0_values_from_tile_index , ...
-                                                 targets_from_tile_index) ;
+[bary_distance_from_match_idx_from_neighbor_idx_from_tile_idx, is_within_cpg_from_match_idx_from_neighbor_idx_from_tile_idx] = ...
+        compute_barycentric_landmark_match_distance(self_ijk0_from_match_index_from_neighbor_index_from_tile_index, ...
+                                                    has_neighbor_from_neighbor_index_from_tile_index, ...
+                                                    neighbor_tile_index_from_neighbor_index_from_tile_index, ...
+                                                    neighbor_ijk0_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                                                    cpg_i0_values , ...
+                                                    cpg_j0_values , ...
+                                                    cpg_k0_values_from_tile_index , ...
+                                                    targets_from_tile_index) ;
 elapsed_time = toc(tic_id) ;
 fprintf('Time to compute barycentric landmark match errors: %g sec\n', elapsed_time) ;
 
-barycentric_z_match_sse_from_tile_index = reshape(barycentric_match_sse_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
-barycentric_match_count_from_tile_index = reshape(barycentric_match_count_from_neighbor_index_from_tile_index(3,:), [tile_count 1]) ;
-barycentric_z_match_sse_from_pair_index = barycentric_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
-barycentric_z_match_count_from_pair_index = barycentric_match_count_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
-barycentric_z_match_mse_from_pair_index = barycentric_z_match_sse_from_pair_index ./ barycentric_z_match_count_from_pair_index ;
-barycentric_z_match_rmse_from_pair_index = sqrt(barycentric_z_match_mse_from_pair_index) ;
+% barycentric_z_match_sse_from_neighbor_index_from_tile_index = cellfun(@(v)(sum(v.^2)), bary_distance_from_match_idx_from_neighbor_idx_from_tile_idx) ;
+% barycentric_match_count_from_neighbor_idx_from_tile_idx = cellfun(@(v)(sum(v)), is_within_cpg_from_match_idx_from_neighbor_idx_from_tile_idx) ;
+% 
+% barycentric_z_match_sse_from_tile_index = reshape(sum(barycentric_z_match_sse_from_neighbor_index_from_tile_index), [tile_count 1]) ;
+% barycentric_match_count_from_tile_index = reshape(sum(barycentric_match_count_from_neighbor_idx_from_tile_idx), [tile_count 1]) ;
+% barycentric_z_match_sse_from_pair_index = barycentric_z_match_sse_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
+% barycentric_z_match_count_from_pair_index = barycentric_match_count_from_tile_index(has_z_plus_1_tile_from_tile_index) ;
+% barycentric_z_match_mse_from_pair_index = barycentric_z_match_sse_from_pair_index ./ barycentric_z_match_count_from_pair_index ;
+% barycentric_z_match_rmse_from_pair_index = sqrt(barycentric_z_match_mse_from_pair_index) ;
+% 
+% total_barycentric_z_match_sse = sum(barycentric_z_match_sse_from_pair_index)
+% max_barycentric_z_match_rmse = max(barycentric_z_match_rmse_from_pair_index)
+% median_barycentric_z_match_rmse = median(barycentric_z_match_rmse_from_pair_index, 'omitnan')
+% 
+% tile_ijk1_from_pair_index = tile_ijk1_from_tile_index(self_tile_index_from_pair_index, :) ;
+% 
+% % make a z-match RMSE stack
+% barycentric_z_match_rmse_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
+% for pair_index = 1 : pair_count ,
+%     tile_ijk1 = tile_ijk1_from_pair_index(pair_index,:) ;
+%     barycentric_z_match_rmse_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = barycentric_z_match_rmse_from_pair_index(pair_index) ;    
+% end
 
-total_barycentric_z_match_sse = sum(barycentric_z_match_sse_from_pair_index)
-max_barycentric_z_match_rmse = max(barycentric_z_match_rmse_from_pair_index)
-median_barycentric_z_match_rmse = median(barycentric_z_match_rmse_from_pair_index, 'omitnan')
-
-tile_ijk1_from_pair_index = tile_ijk1_from_tile_index(self_tile_index_from_pair_index, :) ;
-
-% make a z-match RMSE stack
-barycentric_z_match_rmse_from_tile_ijk1 = nan(size(tile_index_from_tile_ijk1)) ;
-for pair_index = 1 : pair_count ,
-    tile_ijk1 = tile_ijk1_from_pair_index(pair_index,:) ;
-    barycentric_z_match_rmse_from_tile_ijk1(tile_ijk1(1), tile_ijk1(2), tile_ijk1(3)) = barycentric_z_match_rmse_from_pair_index(pair_index) ;    
-end
-
-barycentric_z_match_rmse_from_tile_ijk1_montage = montage_from_stack_ijk(barycentric_z_match_rmse_from_tile_ijk1) ;
-f = figure('color', 'w') ;
-a = axes(f) ;
-imagesc(barycentric_z_match_rmse_from_tile_ijk1_montage, [0 100]) ;
-colorbar(a) ;
-title('Final barycentric Z-Match RMSE (um)') 
-drawnow
-
-% scatter plot of RMSE and matches per pair
-f = figure('color', 'w') ;
-a = axes(f) ;
-plot(a, z_match_count_from_pair_index, barycentric_z_match_rmse_from_pair_index, '.') ;
-xlabel(a, 'Final barycentric Z-match count per tile pair') ;
-ylabel(a, 'Final barycentric Z-match RMSE per tile pair') ;
-
-barycentric_sse_ratio = total_barycentric_z_match_sse/total_stage_z_match_sse
+[barycentric_in_cpg_total_ssd, barycentric_in_cpg_ssd_from_tile_index, barycentric_in_cpg_match_count_from_tile_index, ...
+ barycentric_in_cpg_rmse_from_tile_index, barycentric_in_cpg_rmse_from_tile_ijk1] = ...
+    compute_match_statistics(bary_distance_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                             is_within_cpg_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                             tile_ijk1_from_tile_index, ...
+                             tile_index_from_tile_ijk1) ;
 
 
+% barycentric_z_match_rmse_from_tile_ijk1_montage = montage_from_stack_ijk(barycentric_z_match_rmse_from_tile_ijk1) ;
+% f = figure('color', 'w') ;
+% a = axes(f) ;
+% imagesc(barycentric_z_match_rmse_from_tile_ijk1_montage, [0 100]) ;
+% colorbar(a) ;
+% title('Final barycentric Z-Match RMSE (um)') 
+% drawnow
+% 
+% % scatter plot of RMSE and matches per pair
+% f = figure('color', 'w') ;
+% a = axes(f) ;
+% plot(a, barycentric_z_match_count_from_pair_index, barycentric_z_match_rmse_from_pair_index, '.') ;
+% xlabel(a, 'Final barycentric Z-match count per tile pair') ;
+% ylabel(a, 'Final barycentric Z-match RMSE per tile pair') ;
+
+make_rmse_plots(barycentric_in_cpg_rmse_from_tile_index, ...
+                barycentric_in_cpg_match_count_from_tile_index, ...
+                barycentric_in_cpg_rmse_from_tile_ijk1, ...
+                'Barycentric') ;
+                         
+
+
+%
+% Want to re-compute the total SSE for stage transform, final affine, on just
+% the in-CPG points.  This way we can compute how much the total squared
+% distance has come down just on the matches for which we have a barycentric
+% distance.
+%
+[stage_in_cpg_total_ssd, stage_in_cpg_ssd_from_tile_index, stage_in_cpg_match_count_from_tile_index, ...
+ stage_in_cpg_rmse_from_tile_index, stage_in_cpg_rmse_from_tile_ijk1] = ...
+    compute_match_statistics(stage_dist_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                             is_within_cpg_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                             tile_ijk1_from_tile_index, ...
+                             tile_index_from_tile_ijk1) ;
+[final_affine_in_cpg_total_ssd, final_affine_in_cpg_ssd_from_tile_index, final_affine_in_cpg_match_count_from_tile_index, ...
+ final_affine_in_cpg_rmse_from_tile_index, final_affine_in_cpg_rmse_from_tile_ijk1] = ...
+    compute_match_statistics(final_affin_dist_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                             is_within_cpg_from_match_idx_from_neighbor_idx_from_tile_idx, ...
+                             tile_ijk1_from_tile_index, ...
+                             tile_index_from_tile_ijk1) ;
+                                      
+final_affine_in_cpg_ssd_ratio = final_affine_in_cpg_total_ssd/stage_in_cpg_total_ssd                                            
+barycentric_ssd_ratio = total_barycentric_z_match_sse/stage_in_cpg_total_ssd
+
+make_rmse_plots(stage_in_cpg_rmse_from_tile_index, ...
+                stage_in_cpg_match_count_from_tile_index, ...
+                stage_in_cpg_rmse_from_tile_ijk1, ...
+                'In-CPG Stage') ;
+            
+make_rmse_plots(final_affine_in_cpg_rmse_from_tile_index, ...
+                final_affine_in_cpg_match_count_from_tile_index, ...
+                final_affine_in_cpg_rmse_from_tile_ijk1, ...
+                'In-CPG Final affine') ;
+
+% Make a montage of the ratio of the barycentric error to the final afffine
+final_affine_to_barycentric_mse_ratio_from_tile_ijk1 = (final_affine_in_cpg_rmse_from_tile_ijk1.^2) ./ (barycentric_in_cpg_rmse_from_tile_ijk1.^2) ;
+final_affine_to_barycentric_mse_ratio_from_tile_ijk1_montage = montage_from_stack_ijk(final_affine_to_barycentric_mse_ratio_from_tile_ijk1) ;
+f1 = figure('color', 'w') ;
+a1 = axes(f1) ;
+imagesc(final_affine_to_barycentric_mse_ratio_from_tile_ijk1_montage, [0 10]) ;
+colorbar(a1) ;
+title(sprintf('Final affine MSE over barycentric')) ; 
+drawnow() ;
+
+            
 
 
