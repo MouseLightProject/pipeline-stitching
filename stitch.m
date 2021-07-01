@@ -94,9 +94,8 @@ function stitch(tile_folder_path, ...
         load(regpts_file_path, 'regpts') ;
     else
         directions = 'Z';
-        checkversion = 1;  % 1: loads the version with "checkversion" extension and overwrites existing match if there are more matched points
         % load finished tile matches. find badly matched or missing tile pairs
-        [regpts, featmap] = loadMatchedFeatures(scopeloc, match_folder_path, directions, checkversion) ;    
+        [regpts, featmap] = loadMatchedFeaturesNew(scopeloc, match_folder_path, background_channel_index, directions) ;    
         save(regpts_file_path, '-v7.3', 'regpts', 'featmap')
     end
 

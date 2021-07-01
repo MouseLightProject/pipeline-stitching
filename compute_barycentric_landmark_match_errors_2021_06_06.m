@@ -1,8 +1,7 @@
-sample_tag = '2020-09-15'  %#ok<NOPTS>
-analysis_tag = 'production' 
-path_kind_to_use_for_imagery = 'line-fixed' 
+sample_tag = '2021-06-06'  %#ok<NOPTS>
+analysis_tag = 'production-classifier-z-match-count-threshold-50' 
+path_kind_to_use_for_imagery = 'raw' 
 do_force_computation = false ;
-
 
 raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_tag) ;
 pipeline_output_folder_path = sprintf('/nrs/mouselight/pipeline_output/%s', sample_tag)  %#ok<NOPTS> 

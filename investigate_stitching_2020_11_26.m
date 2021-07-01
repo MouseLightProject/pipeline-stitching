@@ -2,10 +2,11 @@ sample_date = '2020-11-26' ;
 do_force_computation = false ;
 
 script_folder_path = fileparts(mfilename('fullpath')) ;
-memo_folder_path = fullfile(script_folder_path, sprintf('memos-%s', sample_date)) ;
+memo_folder_path = fullfile(script_folder_path, 'memos', sample_date) ;
 
 % Build an index of the paths to raw tiles
-raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
+%raw_tile_path = sprintf('/groups/mousebrainmicro/mousebrainmicro/data/%s/Tiling', sample_date) ;
+raw_tile_path = sprintf('/nearline/mouselight/data/RAW_archive/%s/Tiling', sample_date) ;
 raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
                                            'raw-tile-index', ...
                                            @()(build_raw_tile_index(raw_tile_path)), ...
@@ -13,10 +14,10 @@ raw_tile_index = compute_or_read_from_memo(memo_folder_path, ...
 ijk1_from_tile_index = raw_tile_index.ijk1_from_tile_index ;
 xyz_from_tile_index = raw_tile_index.xyz_from_tile_index ;  % um
 relative_path_from_tile_index = raw_tile_index.relative_path_from_tile_index ;
-tile_index_from_ijk1 = raw_tile_index.tile_index_from_ijk1 ;
+tile_index_from_tile_ijk1 = raw_tile_index.tile_index_from_tile_ijk1 ;
 
 % Display some features of the raw tile index
-tile_lattice_shape = size(tile_index_from_ijk1)
+tile_lattice_shape = size(tile_index_from_tile_ijk1)
 tile_count = length(relative_path_from_tile_index) 
 
 % There's a region in the render that looks like many tiles are "doubled".  What
@@ -25,9 +26,9 @@ tile_count = length(relative_path_from_tile_index)
 % says 2020-12-01/01/01916/01916-ngc.0.tif.  What does that look like?
 
 this_tile_relative_path = '2020-12-01/01/01916'
-imagery_file_relative_path = imagery_file_relative_path_from_relative_path(this_tile_relative_path, 0) ;  % 0 is channel index
+imagery_file_relative_path = imagery_file_relative_path_from_relative_path(this_tile_relative_path, 0, '.mj2') ;  % 0 is channel index
 imagery_file_path = fullfile(raw_tile_path, imagery_file_relative_path)
-raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(imagery_file_path) ;
+raw_tile_stack_yxz_flipped = read_16bit_grayscale_mj2(imagery_file_path) ;
 raw_tile_stack_yxz = flip(flip(raw_tile_stack_yxz_flipped, 1), 2) ;
 raw_tile_stack_yxz_mip = max(raw_tile_stack_yxz, [], 3) ;
 f = figure() ;
@@ -62,9 +63,9 @@ for neighbor_index = 1 : neighbor_count ,
     neighbor_relative_path = relative_path_from_neighbor_index{neighbor_index}
     neighbor_tile_index = tile_index_from_neighbor_index(neighbor_index)
     neighbor_tile_ijk1 = ijk1_from_neighbor_index(neighbor_index, :)
-    imagery_file_relative_path = imagery_file_relative_path_from_relative_path(neighbor_relative_path, 0) ;  % 0 is channel index
+    imagery_file_relative_path = imagery_file_relative_path_from_relative_path(neighbor_relative_path, 0, '.mj2') ;  % 0 is channel index
     imagery_file_path = fullfile(raw_tile_path, imagery_file_relative_path) 
-    raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(imagery_file_path) ;
+    raw_tile_stack_yxz_flipped = read_16bit_grayscale_mj2(imagery_file_path) ;
     raw_tile_stack_yxz = flip(flip(raw_tile_stack_yxz_flipped, 1), 2) ;
     raw_tile_stack_yxz_mip = max(raw_tile_stack_yxz, [], 3) ;
     f = figure() ;
@@ -81,11 +82,11 @@ end
 % half-cut was taken in this plane, and that's an issue?
 
 % Where is that process in z inthe z+1 stack?
-neighbor_index = 6 ;  % z+1
+neighbor_index = 1 ;  % z+1
 relative_path = relative_path_from_neighbor_index{neighbor_index} ;
-imagery_file_relative_path = imagery_file_relative_path_from_relative_path(relative_path, 0) ;  % 0 is channel index
+imagery_file_relative_path = imagery_file_relative_path_from_relative_path(relative_path, 0, '.mj2') ;  % 0 is channel index
 imagery_file_path = fullfile(raw_tile_path, imagery_file_relative_path) 
-raw_tile_stack_yxz_flipped = read_16bit_grayscale_tif(imagery_file_path) ;
+raw_tile_stack_yxz_flipped = read_16bit_grayscale_mj2(imagery_file_path) ;
 raw_tile_stack_yxz = flip(flip(raw_tile_stack_yxz_flipped, 1), 2) ;
 lapwing(raw_tile_stack_yxz)
 
@@ -113,7 +114,7 @@ for axis_index = 1 : 3 ,
         central_tile_ijk1 = ijk1_from_tile_index(central_tile_index,:) ;
         other_tile_ijk1 = central_tile_ijk1 + dijk ;
         if all(other_tile_ijk1 <= tile_lattice_shape) , 
-            other_tile_index = index_using_rows(tile_index_from_ijk1, other_tile_ijk1) ;
+            other_tile_index = index_using_rows(tile_index_from_tile_ijk1, other_tile_ijk1) ;
             if isfinite(other_tile_index) ,
                 other_tile_xyz = xyz_from_tile_index(other_tile_index, :) ;
                 dxyz = (other_tile_xyz - central_tile_xyz)' ;
